@@ -1776,6 +1776,7 @@ const RENDER_BUFFER = 2;
                 this.seed = Math.floor(Math.random() * 1000000);
                 this.globalGrid = [];
                 this.exploredCells = new Set();
+                this.seenCells = new Set();
                 this.chestConditional = {};
                 this.mazeConfig = config;
 
@@ -1801,6 +1802,10 @@ const RENDER_BUFFER = 2;
 
             markExplored(gy, gx) {
                 this.exploredCells.add(`${gy},${gx}`);
+            }
+
+            markSeen(gy, gx) {
+                this.seenCells.add(`${gy},${gx}`);
             }
 
             markConditionalChests() {
@@ -1906,6 +1911,7 @@ const RENDER_BUFFER = 2;
                 this.initTiles();
 
                 this.loadPlayerAnimations();
+                this.loadFogAnimations();
 
                 this.initBGM();
 
@@ -1915,6 +1921,10 @@ const RENDER_BUFFER = 2;
                 this.timerPaused = false;
                 this.lastTimerTick = 0;
                 this.remnantGlowPhase = 0;
+
+                this.lastFogPlayerX = -1;
+                this.lastFogPlayerY = -1;
+                this.lastFogBoosterActive = false;
 
                 this.setupCanvas();
                 this.initPixelPosition();
@@ -2213,9 +2223,22 @@ const RENDER_BUFFER = 2;
                 }
 
                 if (this.fogEnabled) {
-                    for (const key of this.map.exploredCells) {
+                    for (const key of this.map.seenCells) {
                         const [gy, gx] = key.split(',').map(Number);
-                        this.minimapLargeCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                        const cell = this.map.globalGrid[gy][gx];
+                        if (cell === CELL_TYPE.WALL) {
+                            this.minimapLargeCtx.fillStyle = '#3a3a3a';
+                        } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
+                            this.minimapLargeCtx.fillStyle = '#555';
+                        } else if (cell === CELL_TYPE.CHEST) {
+                            this.minimapLargeCtx.fillStyle = COLORS.chest;
+                        } else if (cell === CELL_TYPE.EXIT) {
+                            this.minimapLargeCtx.fillStyle = COLORS.exit;
+                        } else if (cell === CELL_TYPE.MONUMENT) {
+                            this.minimapLargeCtx.fillStyle = '#8888cc';
+                        } else {
+                            this.minimapLargeCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        }
                         this.minimapLargeCtx.fillRect(gx * cellW, gy * cellH, cellW, cellH);
                     }
                 }
@@ -2299,6 +2322,19 @@ const RENDER_BUFFER = 2;
                 this.characterHeight = 42;
                 this.characterPivotY = 38;
                 this.playerScale = 1.2;
+            }
+
+            loadFogAnimations() {
+                this.fogAnimations = [];
+                const fogBasePath = 'assets/spirits/effects-black_fog_frames/';
+                for (let i = 0; i <= 7; i++) {
+                    const img = new Image();
+                    img.src = fogBasePath + `frame_00${i}.png`;
+                    this.fogAnimations.push(img);
+                }
+                this.fogFrameIndex = 0;
+                this.fogFrameTimer = 0;
+                this.fogFrameSpeed = 6;
             }
 
             initBGM() {
@@ -2630,7 +2666,7 @@ const RENDER_BUFFER = 2;
                 }
 
                 const dist = Math.abs(targetGX - currentGX) + Math.abs(targetGY - currentGY);
-                if (this.fogEnabled && dist > this.visionRange && !this.map.exploredCells.has(`${targetGY},${targetGX}`)) {
+                if (this.fogEnabled && dist > this.visionRange && !this.map.seenCells.has(`${targetGY},${targetGX}`)) {
                     return;
                 }
 
@@ -2777,6 +2813,7 @@ const RENDER_BUFFER = 2;
                             this.updateVictory(timestamp);
                         }
                         this.updatePlayerAnimation(dt);
+                        this.updateFogAnimation(dt);
                         const isHighlightMode = this.chestOpenMode === 'voidStep' || this.chestOpenMode === 'magneticGlove';
                         if (!isHighlightMode) {
                             this.render();
@@ -3351,19 +3388,74 @@ const RENDER_BUFFER = 2;
                 }
             }
 
+            drawVisionCutout(ctx, cx, cy, innerR, outerR, time = 0) {
+                const breathe = 1 + Math.sin(time * 1.05) * 0.05;
+                const outerRA = outerR * breathe;
+                const maxExtent = outerRA * 1.7;
+
+                const g1 = ctx.createRadialGradient(cx, cy, innerR * 0.85, cx, cy, outerRA * 0.92);
+                g1.addColorStop(0, 'rgba(0,0,0,1)');
+                g1.addColorStop(0.5, 'rgba(0,0,0,1)');
+                g1.addColorStop(0.68, 'rgba(0,0,0,0.55)');
+                g1.addColorStop(0.84, 'rgba(0,0,0,0.15)');
+                g1.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = g1;
+                ctx.fillRect(cx - maxExtent, cy - maxExtent, maxExtent * 2, maxExtent * 2);
+
+                const g2 = ctx.createRadialGradient(cx, cy, outerRA * 0.78, cx, cy, outerRA * 1.08);
+                g2.addColorStop(0, 'rgba(8, 10, 28, 0.22)');
+                g2.addColorStop(0.5, 'rgba(6, 8, 24, 0.08)');
+                g2.addColorStop(1, 'rgba(4, 6, 20, 0)');
+                ctx.fillStyle = g2;
+                ctx.fillRect(cx - maxExtent, cy - maxExtent, maxExtent * 2, maxExtent * 2);
+
+                const shimmer = Math.sin(time * 1.3 + cx * 0.01) * 0.04 + 0.04;
+                const g3 = ctx.createRadialGradient(cx, cy, outerRA * 0.9, cx, cy, outerRA * 1.25);
+                g3.addColorStop(0, `rgba(10, 14, 32, ${shimmer})`);
+                g3.addColorStop(0.6, `rgba(8, 10, 28, ${shimmer * 0.5})`);
+                g3.addColorStop(1, 'rgba(4, 6, 20, 0)');
+                ctx.fillStyle = g3;
+                ctx.fillRect(cx - maxExtent, cy - maxExtent, maxExtent * 2, maxExtent * 2);
+            }
+
+            updateSeenCells(pixelX, pixelY, radius) {
+                const cellSize = this.cellWidth;
+                const cellsRadius = Math.ceil(radius / cellSize) + 1;
+                const centerGX = Math.round(pixelX / cellSize);
+                const centerGY = Math.round(pixelY / cellSize);
+                const minGX = Math.max(0, centerGX - cellsRadius);
+                const maxGX = Math.min(TOTAL_COLS - 1, centerGX + cellsRadius);
+                const minGY = Math.max(0, centerGY - cellsRadius);
+                const maxGY = Math.min(TOTAL_ROWS - 1, centerGY + cellsRadius);
+                const radiusSq = (radius / cellSize) * (radius / cellSize) * 1.3;
+
+                for (let gy = minGY; gy <= maxGY; gy++) {
+                    for (let gx = minGX; gx <= maxGX; gx++) {
+                        const dcx = gx + 0.5 - centerGX;
+                        const dcy = gy + 0.5 - centerGY;
+                        if (dcx * dcx + dcy * dcy <= radiusSq) {
+                            this.map.markSeen(gy, gx);
+                        }
+                    }
+                }
+            }
+
             drawFog() {
                 if (!this.fogEnabled) return;
 
+                const dpr = window.devicePixelRatio || 1;
                 const viewW = this.screenWidth;
                 const viewH = this.screenHeight;
-                const time = performance.now() / 1000;
                 const cellSize = this.cellWidth;
+                const time = performance.now() / 1000;
 
                 const playerAbsX = this.gridOffsetX + this.playerPixelX - this.renderCamX * cellSize;
                 const playerAbsY = this.gridOffsetY + this.playerPixelY - this.renderCamY * cellSize;
 
-                const innerR = (this.boosterActive ? 4 : 2) * cellSize;
-                const outerR = (this.boosterActive ? 7 : 4.5) * cellSize;
+                const innerR = (this.boosterActive ? 4 : 2) * cellSize * 0.7;
+                const outerR = (this.boosterActive ? 7 : 4.5) * cellSize * 0.7;
+
+                this.updateSeenCells(this.playerPixelX, this.playerPixelY, outerR);
 
                 const camIntX = Math.floor(this.renderCamX);
                 const camIntY = Math.floor(this.renderCamY);
@@ -3373,59 +3465,99 @@ const RENDER_BUFFER = 2;
                 const extraRows = camFracY > 0.001 ? 1 : 0;
 
                 this.ctx.save();
-                this.ctx.translate(
-                    this.gridOffsetX - camFracX * cellSize,
-                    this.gridOffsetY - camFracY * cellSize
-                );
+                this.ctx.translate(this.gridOffsetX - camFracX * cellSize, this.gridOffsetY - camFracY * cellSize);
+
+                const circleR = cellSize * 1.6;
+                const hasFogFrames = this.fogAnimations && this.fogAnimations.length > 0
+                    && this.fogAnimations[0] && this.fogAnimations[0].complete
+                    && this.fogAnimations[0].naturalWidth > 0;
+
+                const fogFrame = hasFogFrames ? this.fogAnimations[this.fogFrameIndex] : null;
+                const frameSize = circleR * 2.8;
 
                 for (let vy = -RENDER_BUFFER; vy < VIEW_ROWS + extraRows + RENDER_BUFFER; vy++) {
                     for (let vx = -RENDER_BUFFER; vx < VIEW_COLS + extraCols + RENDER_BUFFER; vx++) {
                         const gx = camIntX + vx;
                         const gy = camIntY + vy;
                         if (gx < 0 || gx >= TOTAL_COLS || gy < 0 || gy >= TOTAL_ROWS) continue;
+                        if (this.map.seenCells.has(`${gy},${gx}`)) continue;
 
-                        const key = `${gy},${gx}`;
-                        const explored = this.map.exploredCells.has(key);
-                        const cellX = vx * cellSize;
-                        const cellY = vy * cellSize;
+                        const cx = vx * cellSize + cellSize / 2;
+                        const cy = vy * cellSize + cellSize / 2;
 
-                        if (explored) {
-                            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-                        } else {
-                            this.ctx.fillStyle = 'rgba(8, 8, 8, 0.92)';
+                        let isEdge = false;
+                        if (fogFrame) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    if (dx === 0 && dy === 0) continue;
+                                    const ngx = gx + dx;
+                                    const ngy = gy + dy;
+                                    if (ngx < 0 || ngx >= TOTAL_COLS || ngy < 0 || ngy >= TOTAL_ROWS) continue;
+                                    if (this.map.seenCells.has(`${ngy},${ngx}`)) {
+                                        isEdge = true;
+                                        break;
+                                    }
+                                }
+                                if (isEdge) break;
+                            }
                         }
-                        this.ctx.fillRect(cellX, cellY, cellSize, cellSize);
+
+                        if (isEdge) {
+                            const g = this.ctx.createRadialGradient(cx, cy, circleR * 0.6, cx, cy, circleR);
+                            g.addColorStop(0, 'rgba(10, 12, 20, 0.94)');
+                            g.addColorStop(0.4, 'rgba(10, 12, 20, 0.85)');
+                            g.addColorStop(0.7, 'rgba(10, 12, 20, 0.35)');
+                            g.addColorStop(1, 'rgba(10, 12, 20, 0)');
+                            this.ctx.fillStyle = g;
+                            this.ctx.fillRect(cx - circleR, cy - circleR, circleR * 2, circleR * 2);
+
+                            this.ctx.globalAlpha = 0.7;
+                            this.ctx.drawImage(fogFrame, cx - frameSize / 2, cy - frameSize / 2, frameSize, frameSize);
+                            this.ctx.globalAlpha = 1;
+                        } else {
+                            const g = this.ctx.createRadialGradient(cx, cy, circleR * 0.6, cx, cy, circleR);
+                            g.addColorStop(0, 'rgba(10, 12, 20, 0.94)');
+                            g.addColorStop(0.4, 'rgba(10, 12, 20, 0.85)');
+                            g.addColorStop(0.7, 'rgba(10, 12, 20, 0.35)');
+                            g.addColorStop(1, 'rgba(10, 12, 20, 0)');
+                            this.ctx.fillStyle = g;
+                            this.ctx.fillRect(cx - circleR, cy - circleR, circleR * 2, circleR * 2);
+                        }
                     }
                 }
 
                 this.ctx.restore();
 
-                this.ctx.save();
-                this.ctx.globalCompositeOperation = 'destination-out';
+                const playerMoved = Math.abs(this.playerPixelX - this.lastFogPlayerX) > 1 ||
+                    Math.abs(this.playerPixelY - this.lastFogPlayerY) > 1 ||
+                    this.lastFogBoosterActive !== this.boosterActive;
 
-                const numLayers = 5;
-                for (let i = 0; i < numLayers; i++) {
-                    const phase = (i / numLayers) * Math.PI * 2;
-                    const amplitude = 0.35 * cellSize;
-                    const freq1 = 0.7 + i * 0.12;
-                    const freq2 = 0.9 + i * 0.18;
-                    const ox = Math.sin(time * freq1 + phase) * amplitude;
-                    const oy = Math.cos(time * freq2 + phase) * amplitude;
+                if (playerMoved || !this.fogCanvas || this.fogCanvas.width !== viewW * dpr) {
+                    this.lastFogPlayerX = this.playerPixelX;
+                    this.lastFogPlayerY = this.playerPixelY;
+                    this.lastFogBoosterActive = this.boosterActive;
 
-                    const g = this.ctx.createRadialGradient(
-                        playerAbsX + ox, playerAbsY + oy, innerR * 0.8,
-                        playerAbsX + ox, playerAbsY + oy, outerR * 1.2
-                    );
-                    g.addColorStop(0, 'rgba(0,0,0,1)');
-                    g.addColorStop(0.55, 'rgba(0,0,0,1)');
-                    g.addColorStop(0.72, 'rgba(0,0,0,0.45)');
-                    g.addColorStop(0.88, 'rgba(0,0,0,0.1)');
-                    g.addColorStop(1, 'rgba(0,0,0,0)');
-                    this.ctx.fillStyle = g;
-                    this.ctx.fillRect(0, 0, viewW, viewH);
+                    if (!this.fogCanvas || this.fogCanvas.width !== viewW * dpr) {
+                        this.fogCanvas = document.createElement('canvas');
+                        this.fogCanvas.width = viewW * dpr;
+                        this.fogCanvas.height = viewH * dpr;
+                        this.fogCanvas.style.width = viewW + 'px';
+                        this.fogCanvas.style.height = viewH + 'px';
+                        this.fogCtx = this.fogCanvas.getContext('2d');
+                        this.fogCtx.scale(dpr, dpr);
+                    }
+
+                    const fogCtx = this.fogCtx;
+                    fogCtx.clearRect(0, 0, viewW, viewH);
+                    fogCtx.fillStyle = 'rgba(10, 12, 20, 0.48)';
+                    fogCtx.fillRect(0, 0, viewW, viewH);
+                    fogCtx.save();
+                    fogCtx.globalCompositeOperation = 'destination-out';
+                    this.drawVisionCutout(fogCtx, playerAbsX, playerAbsY, innerR, outerR, time);
+                    fogCtx.restore();
                 }
 
-                this.ctx.restore();
+                this.ctx.drawImage(this.fogCanvas, 0, 0, viewW, viewH);
             }
 
             drawRemnants() {
@@ -3448,7 +3580,7 @@ const RENDER_BUFFER = 2;
                     if (vx < -RENDER_BUFFER || vx >= VIEW_COLS + extraCols + RENDER_BUFFER || vy < -RENDER_BUFFER || vy >= VIEW_ROWS + extraRows + RENDER_BUFFER) continue;
 
                     const dist = Math.abs(r.gx - px) + Math.abs(r.gy - py);
-                    if (this.fogEnabled && dist > this.visionRange && !this.map.exploredCells.has(`${r.gy},${r.gx}`)) continue;
+                    if (this.fogEnabled && dist > this.visionRange && !this.map.seenCells.has(`${r.gy},${r.gx}`)) continue;
 
                     const cx = vx * this.cellWidth + this.cellWidth / 2;
                     const cy = vy * this.cellHeight + this.cellHeight / 2;
@@ -3880,6 +4012,13 @@ const RENDER_BUFFER = 2;
                 }
             }
 
+            updateFogAnimation(dt) {
+                if (!this.fogAnimations || this.fogAnimations.length === 0) return;
+                this.fogFrameTimer += dt * 1000;
+                const frameTime = 1000 / this.fogFrameSpeed;
+                this.fogFrameIndex = Math.floor((this.fogFrameTimer / frameTime) % this.fogAnimations.length);
+            }
+
             renderMinimap() {
                 const mw = 100;
                 const mh = 100;
@@ -3919,15 +4058,23 @@ const RENDER_BUFFER = 2;
                 const treasureRange = 1 + (this.treasureVisibility || 0);
 
                 if (this.fogEnabled) {
-                    for (const key of this.map.exploredCells) {
+                    for (const key of this.map.seenCells) {
                         const [gy, gx] = key.split(',').map(Number);
-                        this.minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-                        this.minimapCtx.fillRect(
-                            gx * cellW,
-                            gy * cellH,
-                            cellW,
-                            cellH
-                        );
+                        const cell = this.map.globalGrid[gy][gx];
+                        if (cell === CELL_TYPE.WALL) {
+                            this.minimapCtx.fillStyle = '#444';
+                        } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
+                            this.minimapCtx.fillStyle = '#666';
+                        } else if (cell === CELL_TYPE.CHEST) {
+                            this.minimapCtx.fillStyle = COLORS.chest;
+                        } else if (cell === CELL_TYPE.EXIT) {
+                            this.minimapCtx.fillStyle = COLORS.exit;
+                        } else if (cell === CELL_TYPE.MONUMENT) {
+                            this.minimapCtx.fillStyle = '#8888cc';
+                        } else {
+                            this.minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                        }
+                        this.minimapCtx.fillRect(gx * cellW, gy * cellH, cellW, cellH);
                     }
                 }
 
