@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Maze Generator Test</title>
+    <style>
+        body { background: #000; color: #fff; font-family: monospace; }
+        pre { font-size: 8px; line-height: 1; }
+    </style>
+</head>
+<body>
+    <script src="maze-generator.js"></script>
+    <script>
+        console.log('Testing maze generator...');
+        console.log('CELL_TYPE:', window.CELL_TYPE);
+        console.log('GRID_COLS:', window.GRID_COLS);
+        console.log('GRID_ROWS:', window.GRID_ROWS);
+        console.log('Screen:', window.Screen);
+        console.log('GlobalMazeGenerator:', window.GlobalMazeGenerator);
+
+        const generator = new GlobalMazeGenerator(12345);
+        const grid = generator.generate();
+        
+        console.log('Generated grid:', grid.length, 'rows');
+        console.log('First row:', grid[0]);
+        
+        let output = '';
+        for (let y = 0; y < Math.min(20, grid.length); y++) {
+            for (let x = 0; x < Math.min(30, grid[0].length); x++) {
+                output += grid[y][x] === CELL_TYPE.WALL ? '#' : '.';
+            }
+            output += '\n';
+        }
+        
+        document.body.innerHTML = '<pre>' + output + '</pre>';
+        console.log('Test completed!');
+    </script>
+</body>
+</html>
