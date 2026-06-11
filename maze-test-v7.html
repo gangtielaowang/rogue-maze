@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迷宫生成器 v7 - 可视化测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #111;
+            color: #ddd;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 { font-size: 18px; margin-bottom: 12px; color: #ff9d3a; }
+        #canvas-wrapper {
+            position: relative;
+            background: #1a1510;
+            border: 1px solid #3d3024;
+            overflow: auto;
+            max-width: 90vw;
+            max-height: 70vh;
+        }
+        canvas { display: block; }
+        #info {
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #8b7355;
+            max-width: 800px;
+            text-align: center;
+        }
+        #info .pass { color: #4ade80; }
+        #info .fail { color: #f87171; }
+        #controls {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+        #controls label { font-size: 13px; color: #8b7355; }
+        #controls input, #controls select {
+            background: #2a2118;
+            border: 1px solid #3d3024;
+            color: #e8dcc8;
+            padding: 4px 8px;
+            font-size: 13px;
+            border-radius: 4px;
+        }
+        #controls button {
+            background: #ff9d3a;
+            border: none;
+            color: #111;
+            padding: 6px 16px;
+            font-size: 13px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #controls button:hover { background: #ffb45a; }
+        #legend {
+            margin-top: 8px;
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #8b7355;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border: 1px solid #333;
+            border-radius: 2px;
+        }
+        #stats-table {
+            margin-top: 12px;
+            font-size: 12px;
+            color: #8b7355;
+            border-collapse: collapse;
+        }
+        #stats-table td, #stats-table th {
+            padding: 3px 10px;
+            border: 1px solid #2a2118;
+        }
+        #stats-table th { color: #e8dcc8; background: #2a2118; }
+    </style>
+</head>
+<body>
+    <h1>🧩 迷宫生成器 v7 · 测试</h1>
+
+    <div id="controls">
+        <label>种子: <input type="number" id="seed-input" value="42" style="width:80px"></label>
+        <label>地图尺寸: <input type="number" id="size-input" value="80" style="width:60px"></label>
+        <label>房间数: <input type="number" id="rooms-input" value="15" style="width:50px"></label>
+        <label>隐藏房最少: <input type="number" id="hidden-min" value="3" style="width:45px" min="0"></label>
+        <label>最多: <input type="number" id="hidden-max" value="5" style="width:45px" min="0"></label>
+        <button id="generate-btn">生成迷宫</button>
+    </div>
+
+    <div id="canvas-wrapper">
+        <canvas id="maze-canvas"></canvas>
+    </div>
+
+    <div id="info">等待生成...</div>
+
+    <div id="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#2a2118"></div> 墙体</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#12100c"></div> 地面</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#c9a227"></div> 宝箱</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#4ade80"></div> 出口</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f87171"></div> 起点</div>
+    </div>
+
+    <table id="stats-table">
+        <tr><th>指标</th><th>值</th></tr>
+        <tr><td>房间总数</td><td id="stat-rooms">-</td></tr>
+        <tr><td>隐藏房间</td><td id="stat-hidden">-</td></tr>
+        <tr><td>通道边数</td><td id="stat-edges">-</td></tr>
+        <tr><td>终点可达</td><td id="stat-reachable">-</td></tr>
+        <tr><td>不可达房间</td><td id="stat-unreachable">-</td></tr>
+    </table>
+
+    <script type="module">
+        import { MazeGenerator, generateMaze } from './src/maze/generator.js';
+        import { CELL, ROOM_TYPE } from './src/maze/types.js';
+        import { DEFAULT_CONFIG } from './src/maze/config.js';
+
+        const canvas = document.getElementById('maze-canvas');
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
+        const seedInput = document.getElementById('seed-input');
+        const sizeInput = document.getElementById('size-input');
+        const roomsInput = document.getElementById('rooms-input');
+        const generateBtn = document.getElementById('generate-btn');
+
+        // 颜色方案
+        const COLORS = {
+            [CELL.WALL]: '#2a2118',
+            [CELL.FLOOR]: '#12100c',
+            [CELL.CHEST]: '#c9a227',
+            [CELL.EXIT]: '#4ade80',
+            [CELL.HIDDEN_WALL]: '#3d3024',
+            [CELL.HIDDEN_FLOOR]: '#1a1612',
+            [CELL.HIDDEN_PASSAGE]: '#1a1612',
+        };
+
+        function render(result) {
+            const { grid, rooms, edges, startRoom, endRoom, validation } = result;
+            const mapSize = grid.length;
+
+            // 计算画布大小（缩放以适应）
+            const maxDisplay = 800;
+            const cellSize = Math.max(3, Math.floor(maxDisplay / mapSize));
+            const canvasSize = mapSize * cellSize;
+
+            canvas.width = canvasSize;
+            canvas.height = canvasSize;
+
+            // 绘制网格
+            for (let r = 0; r < mapSize; r++) {
+                for (let c = 0; c < mapSize; c++) {
+                    const cell = grid[r][c];
+                    let color = COLORS[cell] || '#2a2118';
+                    ctx.fillStyle = color;
+                    ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                }
+            }
+
+            // 绘制房间边框（高亮）
+            ctx.strokeStyle = 'rgba(255, 157, 58, 0.4)';
+            ctx.lineWidth = 1;
+            for (const room of rooms) {
+                const b = room.bounds;
+                ctx.strokeRect(
+                    b.left * cellSize, b.top * cellSize,
+                    (b.right - b.left + 1) * cellSize,
+                    (b.bottom - b.top + 1) * cellSize
+                );
+
+                // 隐藏房间用特殊颜色
+                if (room.type === ROOM_TYPE.HIDDEN) {
+                    ctx.fillStyle = 'rgba(248, 113, 113, 0.15)';
+                    ctx.fillRect(
+                        b.left * cellSize, b.top * cellSize,
+                        (b.right - b.left + 1) * cellSize,
+                        (b.bottom - b.top + 1) * cellSize
+                    );
+                }
+            }
+
+            // 绘制起点（红色标记）
+            if (startRoom) {
+                const sr = startRoom.centerRow;
+                const sc = startRoom.centerCol;
+                ctx.fillStyle = '#f87171';
+                ctx.beginPath();
+                ctx.arc(sc * cellSize + cellSize / 2, sr * cellSize + cellSize / 2, cellSize / 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 绘制房间名
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = `${Math.max(8, cellSize * 0.7)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (const room of rooms) {
+                const label = room.type === ROOM_TYPE.START ? 'S' :
+                             room.type === ROOM_TYPE.END ? 'E' :
+                             room.type === ROOM_TYPE.HIDDEN ? '?' :
+                             room.id.replace('room_', '');
+                ctx.fillText(label, room.centerCol * cellSize + cellSize / 2, room.centerRow * cellSize + cellSize / 2);
+            }
+
+            // 更新信息
+            const hiddenCount = rooms.filter(r => r.type === ROOM_TYPE.HIDDEN).length;
+            document.getElementById('stat-rooms').textContent = rooms.length;
+            document.getElementById('stat-hidden').textContent = hiddenCount;
+            document.getElementById('stat-edges').textContent = edges.length;
+            document.getElementById('stat-reachable').textContent =
+                validation.exitReachable ? '✅ 是' : '❌ 否';
+            document.getElementById('stat-unreachable').textContent =
+                validation.unreachableRooms > 0 ? `❌ ${validation.unreachableRooms}` : '✅ 无';
+
+            if (validation.passed) {
+                info.innerHTML = `<span class="pass">✅ 验证通过</span> — ` +
+                    `${rooms.length} 个房间, ${edges.length} 条通道, ` +
+                    `${mapSize}×${mapSize} 网格, ` +
+                    `地面格 ${validation.visitedCount}/${mapSize * mapSize}`;
+            } else {
+                info.innerHTML = `<span class="fail">❌ 验证失败</span> — ` +
+                    `${validation.exitReachable ? '' : '终点不可达! '}` +
+                    `${validation.unreachableRooms > 0 ? validation.unreachableRooms + '个房间不可达!' : ''}`;
+            }
+        }
+
+        function generate() {
+            const seed = parseInt(seedInput.value) || 42;
+            const mapSize = parseInt(sizeInput.value) || 80;
+            const roomCount = parseInt(roomsInput.value) || 15;
+            const hiddenMin = parseInt(document.getElementById('hidden-min').value) || 3;
+            const hiddenMax = parseInt(document.getElementById('hidden-max').value) || 5;
+
+            const config = {
+                seed,
+                mapSize,
+                roomCount,
+                hiddenRoomCount: { min: hiddenMin, max: hiddenMax },
+            };
+
+            try {
+                const result = generateMaze(config);
+                render(result);
+                info.innerHTML = `✅ 生成成功 (种子 ${seed})` +
+                    ` — ${result.rooms.length} 房间, ${mapSize}×${mapSize}`;
+            } catch (err) {
+                info.innerHTML = `❌ 生成失败: ${err.message}`;
+                console.error(err);
+            }
+        }
+
+        generateBtn.addEventListener('click', generate);
+        generate();
+
+        // 回车键触发生成
+        [seedInput, sizeInput, roomsInput].forEach(el => {
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') generate();
+            });
+        });
+    </script>
+</body>
+</html>

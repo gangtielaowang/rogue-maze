@@ -63,50 +63,68 @@
         }
 
         #game-scroll-container {
-            flex: 0 0 60%;
+            flex: 0 0 auto;
             position: relative;
-            width: 100%;
             overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            line-height: 0;
+        }
+
+        .hud-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            pointer-events: none;
         }
 
         #game-canvas {
             display: block;
-            width: 100%;
-            height: 100%;
         }
 
         #ui-layer {
-            flex: 1;
+            flex: 0 0 auto;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 16px;
+            padding: 10px 16px 16px;
             background: var(--bg-dark);
         }
 
         .ui-top {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
         .echo-counter {
             display: flex;
             align-items: center;
-            gap: 8px;
-            background: var(--ui-bg);
-            padding: 8px 14px;
-            border-radius: 20px;
+            gap: 5px;
+            background: rgba(20, 16, 12, 0.85);
+            padding: 4px 10px;
+            border-radius: 14px;
             border: 1px solid var(--ui-border);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
         }
 
         .echo-icon {
-            width: 20px;
-            height: 20px;
+            width: 12px;
+            height: 12px;
             background: linear-gradient(180deg, var(--echo-glow) 0%, var(--echo-dim) 100%);
             border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-            box-shadow: 0 0 12px var(--echo-glow), 0 0 24px rgba(255, 157, 58, 0.4);
+            box-shadow: 0 0 6px var(--echo-glow), 0 0 12px rgba(255, 157, 58, 0.4);
             animation: flicker 2s ease-in-out infinite;
         }
 
@@ -116,22 +134,22 @@
         }
 
         .echo-count {
-            font-size: 18px;
+            font-size: 12px;
             font-weight: 700;
             color: var(--echo-glow);
-            text-shadow: 0 0 8px rgba(255, 157, 58, 0.5);
+            text-shadow: 0 0 5px rgba(255, 157, 58, 0.5);
         }
 
         .booster-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 8px 16px;
+            padding: 6px 14px;
             background: linear-gradient(135deg, #3a1f0a 0%, #5a2a0a 100%);
             color: #ffb347;
             border: 1px solid #8b5a2b;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -162,11 +180,11 @@
         }
 
         .screen-indicator {
-            background: var(--ui-bg);
-            padding: 6px 12px;
-            border-radius: 16px;
+            background: rgba(20, 16, 12, 0.85);
+            padding: 3px 8px;
+            border-radius: 10px;
             border: 1px solid var(--ui-border);
-            font-size: 12px;
+            font-size: 10px;
             color: var(--text-secondary);
         }
 
@@ -176,8 +194,8 @@
         }
 
         .menu-btn {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             background: var(--ui-bg);
             border: 1px solid var(--ui-border);
             border-radius: 10px;
@@ -185,7 +203,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
             transition: all 0.2s ease;
@@ -197,7 +215,7 @@
         }
 
         .menu-btn span {
-            width: 18px;
+            width: 16px;
             height: 2px;
             background: var(--text-secondary);
             border-radius: 1px;
@@ -206,7 +224,8 @@
         .ui-bottom {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-end;
+            gap: 8px;
         }
 
         .minimap-container {
@@ -275,7 +294,9 @@
 
         .action-buttons {
             display: flex;
-            gap: 12px;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
         }
 
         .action-btn {
@@ -317,6 +338,29 @@
 
         .backpack-btn .icon {
             color: var(--chest-glow);
+        }
+
+        .dash-btn {
+            background: linear-gradient(180deg, rgba(100, 200, 255, 0.2) 0%, rgba(100, 200, 255, 0.08) 100%);
+            border-color: rgba(100, 200, 255, 0.4);
+        }
+
+        .dash-btn .icon {
+            color: #64c8ff;
+        }
+
+        .dash-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .dash-btn.cooldown {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .dash-btn.cooldown .label {
+            color: #64c8ff;
         }
 
         #overlay {
@@ -582,17 +626,10 @@
         }
 
         #joystick-container {
-            display: none;
             z-index: 10;
             -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
-        }
-
-        @media (pointer: coarse) {
-            #joystick-container {
-                display: block;
-            }
         }
 
         #joystick-base {
@@ -993,21 +1030,25 @@
     <div id="app">
         <div id="game-container">
             <div id="game-scroll-container">
-                <canvas id="game-canvas"></canvas>
+                <div class="canvas-wrapper">
+                    <canvas id="game-canvas"></canvas>
+                    <div class="hud-overlay">
+                        <div class="echo-counter">
+                            <div class="echo-icon"></div>
+                            <span class="echo-count" id="echo-count">999</span>
+                        </div>
+                        <div class="screen-indicator" id="screen-indicator">
+                            坐标 <span id="screen-pos">0,0</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="ui-layer">
                 <div class="ui-top">
-                    <div class="echo-counter">
-                        <div class="echo-icon"></div>
-                        <span class="echo-count" id="echo-count">999</span>
-                    </div>
                     <button class="booster-btn" id="booster-btn" onclick="window._game && window._game.activateBooster()">
                         共鸣
                     </button>
-                    <div class="screen-indicator" id="screen-indicator">
-                        坐标 <span id="screen-pos">0,0</span>
-                    </div>
                     <button class="menu-btn" id="menu-btn">
                         <span></span>
                         <span></span>
@@ -1019,16 +1060,20 @@
                 </div>
 
                 <div class="ui-bottom">
-                    <div class="minimap-container" id="minimap-container">
-                        <canvas id="minimap"></canvas>
-                        <div class="minimap-hint">点击放大</div>
-                    </div>
                     <div id="joystick-container">
                         <div id="joystick-base">
                             <div id="joystick-thumb"></div>
                         </div>
                     </div>
+                    <div class="minimap-container" id="minimap-container">
+                        <canvas id="minimap"></canvas>
+                        <div class="minimap-hint">点击放大</div>
+                    </div>
                     <div class="action-buttons">
+                        <button class="action-btn dash-btn" id="dash-btn">
+                            <span class="icon">⚡</span>
+                            <span class="label">冲刺</span>
+                        </button>
                         <button class="action-btn backpack-btn" id="backpack-btn">
                             <span class="icon">🎒</span>
                             <span class="label">背包</span>
@@ -1075,6 +1120,18 @@
                         <div class="debug-row">
                             <label>BGM 播放器</label>
                             <button class="toggle-btn active" id="debug-bgm-player-btn" onclick="toggleBgmPlayer()">打开</button>
+                        </div>
+                        <div class="debug-row">
+                            <label>隐藏房间高亮</label>
+                            <button class="toggle-btn" id="debug-hidden-toggle" onclick="toggleHiddenRooms()">开启</button>
+                        </div>
+                        <div class="debug-row">
+                            <label>碰撞盒显示</label>
+                            <button class="toggle-btn" id="debug-collision-toggle" onclick="toggleCollisionBox()">开启</button>
+                        </div>
+                        <div class="debug-row">
+                            <label>碰撞盒脚部比率<span id="debug-foot-ratio-value">50%</span></label>
+                            <input type="range" id="debug-foot-ratio" min="0" max="10" step="1" value="5" oninput="onFootRatioChange(this.value)">
                         </div>
                     </div>
                     <div class="debug-section" id="debug-fog-section">
@@ -1306,6 +1363,9 @@
     <script src="maze-generator-v3.js"></script>
     <script src="maze-generator-v4.js"></script>
     <script src="maze-generator-v5.js"></script>
+    <script src="maze-generator-v6.js"></script>
+    <script src="src/bridge/maze-v7-adapter.js"></script>
+    <script src="src/bridge/mist-integration.js"></script>
     <script src="capsule-data.js"></script>
     <script>
         if (typeof DS01MazeGenerator === 'undefined') {
@@ -1322,6 +1382,13 @@
         }
         if (typeof MazeGeneratorV5 === 'undefined') {
             console.warn('WARN: maze-generator-v5.js not loaded, V5 unavailable');
+        }
+        if (typeof MazeGeneratorV6 === 'undefined') {
+            console.warn('WARN: maze-generator-v6.js not loaded, V6 unavailable');
+        }
+        if (typeof MazeGeneratorV7 === 'undefined') {
+            console.error('ERROR: src/bridge/maze-v7-adapter.js not loaded!');
+            alert('迷宫生成器V7加载失败，请检查文件路径');
         }
         if (typeof CAPSULE_DB === 'undefined') {
             console.error('ERROR: capsule-data.js not loaded!');
@@ -1752,26 +1819,48 @@
         }
 
         const CELL_SIZE = 40;
+        const FIXED_CELL_SIZE = 40;
         const GRID_COLS = window.GRID_COLS;
         const GRID_ROWS = window.GRID_ROWS;
         const VIEW_COLS = 10;
-const VIEW_ROWS = 12;
-const RENDER_BUFFER = 2;
+        const VIEW_ROWS = 12;
+        const GAME_WIDTH = VIEW_COLS * FIXED_CELL_SIZE;
+        const GAME_HEIGHT = VIEW_ROWS * FIXED_CELL_SIZE;
+        const RENDER_BUFFER = 2;
         const SCREEN_COLS = window.SCREEN_COLS;
         const SCREEN_ROWS = window.SCREEN_ROWS;
-        const TOTAL_COLS = SCREEN_COLS * GRID_COLS;
-        const TOTAL_ROWS = SCREEN_ROWS * GRID_ROWS;
+        let TOTAL_COLS = SCREEN_COLS * GRID_COLS;
+        let TOTAL_ROWS = SCREEN_ROWS * GRID_ROWS;
         const CELL_TYPE = window.CELL_TYPE;
+        // v6 隐藏房间类型
+        if (CELL_TYPE) {
+            CELL_TYPE.HIDDEN_WALL = 11;
+            CELL_TYPE.HIDDEN_FLOOR = 12;
+            CELL_TYPE.HIDDEN_PASSAGE = 13;
+        }
 
         // BGM track manifest: path, loopStart(time in seconds), loopEnd(time in seconds)
         // Set loopEnd to 0 to loop the entire track, or null to not loop
         const BGM_TRACKS = [
             { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.3_01.mp3', loopStart: 12.646, loopEnd: 126.3 },
             { path: 'assets/bgm/main/rogue-maze_mainbgm_cc_v0.1_01.mp3', loopStart: 28.774, loopEnd: 239.969 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.12_01.mp3', loopStart: 80.866, loopEnd: 261.875 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.12_02.mp3', loopStart: 38.107, loopEnd: 163.693 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.15_01.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.15_02.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_boss_v0.16_01.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.17_01.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_v0.17_02.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_boss_v0.18_01.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_boss_v0.19_01.mp3', loopStart: 0, loopEnd: 0 },
+            { path: 'assets/bgm/main/rogue-maze_mainbgm_boss_v0.19_02.mp3', loopStart: 0, loopEnd: 0 },
         ];
 
         let fogEnabled = false;
         let gridLinesEnabled = false;
+        let hiddenRoomsHighlight = true;  // 默认开启调试高亮
+        let showCollisionBox = true;     // 默认开启碰撞盒显示
+        let collisionBoxFootRatio = 0.5; // 碰撞盒脚部比率: 0=全脚底 0.5=中心 1=全头顶, 步进0.1
 
         function toggleFog() {
             fogEnabled = !fogEnabled;
@@ -1791,6 +1880,25 @@ const RENDER_BUFFER = 2;
             if (game) {
                 game.gridLinesEnabled = gridLinesEnabled;
             }
+        }
+
+        function toggleHiddenRooms() {
+            hiddenRoomsHighlight = !hiddenRoomsHighlight;
+            const btn = document.getElementById('debug-hidden-toggle');
+            btn.textContent = hiddenRoomsHighlight ? '开启' : '关闭';
+            btn.classList.toggle('active', !hiddenRoomsHighlight);
+        }
+
+        function toggleCollisionBox() {
+            showCollisionBox = !showCollisionBox;
+            const btn = document.getElementById('debug-collision-toggle');
+            btn.textContent = showCollisionBox ? '开启' : '关闭';
+            btn.classList.toggle('active', !showCollisionBox);
+        }
+
+        function onFootRatioChange(val) {
+            collisionBoxFootRatio = parseInt(val) / 10;
+            document.getElementById('debug-foot-ratio-value').textContent = Math.round(collisionBoxFootRatio * 100) + '%';
         }
 
         const BACKPACK_CAPACITY = 10;
@@ -1922,14 +2030,40 @@ const RENDER_BUFFER = 2;
                 this.seenCellsTime = {};
                 this.chestConditional = {};
                 this.mazeConfig = config;
+                this.hiddenRooms = []; // v6
 
                 this.generateWorld();
             }
 
             generateWorld() {
-                const generator = new MazeGeneratorV5(this.seed, this.mazeConfig);
+                const generator = new MazeGeneratorV7(this.seed, this.mazeConfig);
                 const mazeData = generator.generate();
                 this.globalGrid = mazeData.globalGrid;
+                this.hiddenRooms = mazeData.hiddenRooms || [];
+
+                // 同步 TOTAL_ROWS/COLS 到实际生成的网格尺寸
+                TOTAL_ROWS = this.globalGrid.length;
+                TOTAL_COLS = this.globalGrid[0] ? this.globalGrid[0].length : TOTAL_ROWS;
+                console.log(`隐藏房间: ${this.hiddenRooms.length} 个`);
+                if (this.hiddenRooms.length > 0) {
+                    for (const r of this.hiddenRooms) {
+                        console.log(`  房间 ${r.id}: gridRow=${r.gridRow}, gridCol=${r.gridCol}, w=${r.width}, h=${r.height}, passage=${r.hiddenPassage?.direction || 'none'}, entrance=(${r.hiddenPassage?.entranceGY},${r.hiddenPassage?.entranceGX}), doorway=(${r.hiddenPassage?.doorwayGY},${r.hiddenPassage?.doorwayGX})`);
+                    }
+                }
+
+                // 全局网格类型统计
+                const typeCount = {};
+                for (let r = 0; r < TOTAL_ROWS; r++) {
+                    for (let c = 0; c < TOTAL_COLS; c++) {
+                        const v = this.globalGrid[r][c];
+                        typeCount[v] = (typeCount[v] || 0) + 1;
+                    }
+                }
+                const typeNames = {0:'WALL',1:'PATH/FLOOR',2:'CHEST',3:'EXIT',4:'RUIN',5:'HIGH_COST',6:'MONUMENT',11:'HIDDEN_WALL',12:'HIDDEN_FLOOR',13:'HIDDEN_PASSAGE'};
+                console.log('网格类型统计:');
+                for (const [k, v] of Object.entries(typeCount).sort((a,b)=>parseInt(a[0])-parseInt(b[0]))) {
+                    console.log(`  类型${k} (${typeNames[k]||'?'}): ${v} 格`);
+                }
 
                 const startPos = mazeData.startPosition;
                 this.playerGlobalX = startPos.x;
@@ -1981,6 +2115,11 @@ const RENDER_BUFFER = 2;
                 }
 
                 if (this.globalGrid[newY][newX] === CELL_TYPE.WALL) {
+                    return { moved: false };
+                }
+
+                // v6: HIDDEN_WALL 也不可通过
+                if (this.globalGrid[newY][newX] === CELL_TYPE.HIDDEN_WALL) {
                     return { moved: false };
                 }
 
@@ -2042,6 +2181,9 @@ const RENDER_BUFFER = 2;
                 this.autoMoveActive = false;
                 this.autoMovePath = [];
                 this.autoMoveTarget = null;
+                
+                this.dashActive = false;
+                this.dashCooldownEnd = 0;
 
                 this.petrifying = false;
                 this.petrifyPhase = 0;
@@ -2050,6 +2192,8 @@ const RENDER_BUFFER = 2;
 
                 this.fogEnabled = fogEnabled;
                 this.gridLinesEnabled = gridLinesEnabled;
+                this.revealedBackup = null;
+                this.revealedRoomId = null;
 
                 this.victoryAnimating = false;
                 this.victoryPhase = 0;
@@ -2061,6 +2205,7 @@ const RENDER_BUFFER = 2;
                 this.loadFogAnimations();
 
                 this.initBGM();
+                this.loadDashSFX();
 
                 this.boosterActive = false;
                 this.boosterEndTime = 0;
@@ -2068,6 +2213,18 @@ const RENDER_BUFFER = 2;
                 this.timerPaused = false;
                 this.lastTimerTick = 0;
                 this.remnantGlowPhase = 0;
+
+                this.dashActive = false;
+                this.dashFromX = 0;
+                this.dashFromY = 0;
+                this.dashTargetX = 0;
+                this.dashTargetY = 0;
+                this.dashStartTime = 0;
+                this.dashDuration = 0.12;
+                this.dashCooldownEnd = 0;
+
+                this.moveDirX = 0;
+                this.moveDirY = 1;
 
                 this.setupCanvas();
                 this.initPixelPosition();
@@ -2117,13 +2274,32 @@ const RENDER_BUFFER = 2;
                         shadow_inner: ld(52),
                         shadow_outer: ld(53)
                     },
-                    target_marker: ld(60)
+                    target_marker: ld(60),
+                    // v6 门 tile（隐藏房间通道入口用）
+                    door: {
+                        open_1w:   ld(9),
+                        open_2w_l: ld(10),
+                        open_2w_r: ld(11),
+                        full_1w:   ld(21),
+                        full_2w_l: ld(22),
+                        full_2w_r: ld(23),
+                        half_1w:   ld(33),
+                        half_2w_l: ld(34),
+                        half_2w_r: ld(35),
+                        closed_1w: ld(45),
+                        closed_2w_l: ld(46),
+                        closed_2w_r: ld(47)
+                    }
                 };
             }
 
             isWall(gx, gy) {
                 if (gx < 0 || gx >= TOTAL_COLS || gy < 0 || gy >= TOTAL_ROWS) return true;
-                return this.map.globalGrid[gy][gx] === CELL_TYPE.WALL;
+                const cell = this.map.globalGrid[gy][gx];
+                return cell === CELL_TYPE.WALL ||
+                       cell === CELL_TYPE.HIDDEN_WALL ||
+                       cell === CELL_TYPE.HIDDEN_FLOOR ||
+                       cell === CELL_TYPE.HIDDEN_PASSAGE;
             }
 
             hashPos(gx, gy) {
@@ -2264,16 +2440,19 @@ const RENDER_BUFFER = 2;
             }
 
             setupCanvas() {
-                const container = this.scrollContainer;
                 const dpr = window.devicePixelRatio || 1;
 
-                this.screenWidth = container.clientWidth;
-                this.screenHeight = container.clientHeight;
+                this.cellWidth = FIXED_CELL_SIZE;
+                this.cellHeight = FIXED_CELL_SIZE;
+                this.screenWidth = GAME_WIDTH;
+                this.screenHeight = GAME_HEIGHT;
+                this.gridOffsetX = 0;
+                this.gridOffsetY = 0;
 
-                this.canvas.width = this.screenWidth * dpr;
-                this.canvas.height = this.screenHeight * dpr;
-                this.canvas.style.width = this.screenWidth + 'px';
-                this.canvas.style.height = this.screenHeight + 'px';
+                this.canvas.width = GAME_WIDTH * dpr;
+                this.canvas.height = GAME_HEIGHT * dpr;
+                this.canvas.style.width = GAME_WIDTH + 'px';
+                this.canvas.style.height = GAME_HEIGHT + 'px';
                 this.ctx.scale(dpr, dpr);
                 this.ctx.imageSmoothingEnabled = false;
 
@@ -2294,14 +2473,6 @@ const RENDER_BUFFER = 2;
                 this.minimapLargeCtx.imageSmoothingEnabled = false;
 
                 this.setupMinimapClick();
-
-                this.cellWidth = this.screenWidth / VIEW_COLS;
-                this.cellHeight = this.screenHeight / VIEW_ROWS;
-                const cellSize = Math.min(this.cellWidth, this.cellHeight);
-                this.cellWidth = cellSize;
-                this.cellHeight = cellSize;
-                this.gridOffsetX = (this.screenWidth - VIEW_COLS * cellSize) / 2;
-                this.gridOffsetY = (this.screenHeight - VIEW_ROWS * cellSize) / 2;
             }
 
             setupMinimapClick() {
@@ -2345,7 +2516,10 @@ const RENDER_BUFFER = 2;
                     for (let gy = 0; gy < TOTAL_ROWS; gy++) {
                         for (let gx = 0; gx < TOTAL_COLS; gx++) {
                             const cell = this.map.globalGrid[gy][gx];
-                            if (cell === CELL_TYPE.WALL) {
+                            if (cell === CELL_TYPE.WALL ||
+                                cell === CELL_TYPE.HIDDEN_WALL ||
+                                cell === CELL_TYPE.HIDDEN_FLOOR ||
+                                cell === CELL_TYPE.HIDDEN_PASSAGE) {
                                 this.minimapLargeCtx.fillStyle = '#2a2a2a';
                                 this.minimapLargeCtx.fillRect(gx * cellW, gy * cellH, cellW, cellH);
                             } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
@@ -2369,7 +2543,10 @@ const RENDER_BUFFER = 2;
                     for (const key of this.map.seenCells) {
                         const [gy, gx] = key.split(',').map(Number);
                         const cell = this.map.globalGrid[gy][gx];
-                        if (cell === CELL_TYPE.WALL) {
+                        if (cell === CELL_TYPE.WALL ||
+                            cell === CELL_TYPE.HIDDEN_WALL ||
+                            cell === CELL_TYPE.HIDDEN_FLOOR ||
+                            cell === CELL_TYPE.HIDDEN_PASSAGE) {
                             this.minimapLargeCtx.fillStyle = '#3a3a3a';
                         } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
                             this.minimapLargeCtx.fillStyle = '#555';
@@ -2398,6 +2575,40 @@ const RENDER_BUFFER = 2;
                             if (dist <= maxDist) {
                                 this.minimapLargeCtx.fillStyle = COLORS.chest;
                                 this.minimapLargeCtx.fillRect(gx * cellW - 1, gy * cellH - 1, 2, 2);
+                            }
+                        }
+                    }
+                }
+
+                if (typeof hiddenRoomsHighlight !== 'undefined' && hiddenRoomsHighlight && this.map.hiddenRooms) {
+                    for (const room of this.map.hiddenRooms) {
+                        // 绘制半透明底色标记整个房间区域
+                        this.minimapLargeCtx.fillStyle = 'rgba(255, 50, 255, 0.35)';
+                        this.minimapLargeCtx.fillRect(
+                            room.gridCol * cellW,
+                            room.gridRow * cellH,
+                            room.width * cellW,
+                            room.height * cellH
+                        );
+                        // 绘制亮色边框
+                        this.minimapLargeCtx.strokeStyle = '#ff00ff';
+                        this.minimapLargeCtx.lineWidth = 2;
+                        this.minimapLargeCtx.strokeRect(
+                            room.gridCol * cellW + 1,
+                            room.gridRow * cellH + 1,
+                            room.width * cellW - 2,
+                            room.height * cellH - 2
+                        );
+                        // 逐个 HIDDEN_FLOOR 格点亮
+                        for (let dy = 0; dy < room.height; dy++) {
+                            for (let dx = 0; dx < room.width; dx++) {
+                                const gx = room.gridCol + dx;
+                                const gy = room.gridRow + dy;
+                                if (gy < TOTAL_ROWS && gx < TOTAL_COLS &&
+                                    this.map.globalGrid[gy][gx] === CELL_TYPE.HIDDEN_FLOOR) {
+                                    this.minimapLargeCtx.fillStyle = '#ff44ff';
+                                    this.minimapLargeCtx.fillRect(gx * cellW + 1, gy * cellH + 1, cellW - 2, cellH - 2);
+                                }
                             }
                         }
                     }
@@ -2530,6 +2741,28 @@ const RENDER_BUFFER = 2;
                 document.addEventListener('touchstart', bgmStartHandler);
             }
 
+            loadDashSFX() {
+                this.dashSFX = [];
+                const sfxPaths = [
+                    'assets/sfx/skill_flash_move_01.wav',
+                    'assets/sfx/skill_flash_move_02.wav'
+                ];
+                for (const path of sfxPaths) {
+                    const audio = new Audio();
+                    audio.preload = 'auto';
+                    audio.src = path;
+                    audio.volume = 0.6;
+                    this.dashSFX.push(audio);
+                }
+            }
+
+            playDashSFX() {
+                if (!this.dashSFX || this.dashSFX.length === 0) return;
+                const audio = this.dashSFX[Math.floor(Math.random() * this.dashSFX.length)];
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            }
+
             playBGM(fromTime) {
                 if (!this.bgmBuffer) return;
                 this._stopSourceNode();
@@ -2593,15 +2826,19 @@ const RENDER_BUFFER = 2;
             }
 
             getPlayerBounds(pixelX, pixelY) {
+                const footRatio = (typeof collisionBoxFootRatio !== 'undefined') ? collisionBoxFootRatio : 0.5;
                 const collisionWidth = this.cellWidth * 0.4 * this.playerScale;
                 const collisionHeight = this.cellHeight * 0.3 * this.playerScale;
                 const halfWidth = collisionWidth / 2;
                 const halfHeight = collisionHeight / 2;
+                // footRatio=0 → 全在底部点; 0.5 → 中心在脚底(等同旧 top=-0.3，bottom=+0.7); 1.0 → 全在头顶
+                const topFrac = 1 - footRatio * 2 + 0.3;
+                const bottomFrac = footRatio * 2 - 0.3;
                 return {
                     left: pixelX - halfWidth,
                     right: pixelX + halfWidth,
-                    top: pixelY - halfHeight * 0.3,
-                    bottom: pixelY + halfHeight * 0.7
+                    top: pixelY - halfHeight * topFrac,
+                    bottom: pixelY + halfHeight * bottomFrac
                 };
             }
 
@@ -2617,7 +2854,8 @@ const RENDER_BUFFER = 2;
                     return false;
                 }
                 const cell = this.map.globalGrid[gy][gx];
-                return cell !== CELL_TYPE.WALL && cell !== CELL_TYPE.MONUMENT;
+                return cell !== CELL_TYPE.WALL && cell !== CELL_TYPE.MONUMENT &&
+                       cell !== CELL_TYPE.HIDDEN_WALL;
             }
 
             isTopEdgeCell(gx, gy) {
@@ -2628,6 +2866,37 @@ const RENDER_BUFFER = 2;
                 const gRgt = !this.isWall(gx + 1, gy);
                 if ((gLft || gRgt) && gLft !== gRgt) return true;
                 if (!gLft && !gRgt) return true;
+                return false;
+            }
+
+            // 判断该格是否需要在玩家之后渲染（覆盖玩家形成伪3D深度）
+            // 覆盖 tile: 顶部盖(0004/0005/0026), 侧边(0013/0015), 侧转正(0016/0017), 凹角(0001/0003)
+            shouldRenderOverPlayer(gx, gy) {
+                if (!this.isWall(gx, gy)) return false;
+                // 顶部盖 → cover
+                if (this.isTopEdgeCell(gx, gy)) return true;
+                // 立面（下方无墙）→ 玩家遮墙，不 cover
+                if (!this.isWall(gx, gy + 1)) return false;
+                // 墙帽：上方无墙 → cover
+                if (!this.isWall(gx, gy - 1)) return true;
+                // 凹角 inner_tl (tile_0027) / inner_tr (tile_0025)：左右有墙，对角无墙
+                if (this.isWall(gx - 1, gy) && !this.isWall(gx - 1, gy - 1)) return true;
+                if (this.isWall(gx + 1, gy) && !this.isWall(gx + 1, gy - 1)) return true;
+                // 中间层：下方墙是立面且边缘 → side_to_front (tile_0016/0017)
+                if (this.isFrontRowCell(gx, gy + 1)) {
+                    const belowType = this.getFrontFaceType(gx, gy + 1);
+                    if (belowType === 'edge_l' || belowType === 'edge_r') return true;
+                }
+                const gLft = !this.isWall(gx - 1, gy);
+                const gRgt = !this.isWall(gx + 1, gy);
+                // 凹角 inner_bl (tile_0003) / inner_br (tile_0001)：左右上角有墙，对应下角暴露
+                if (!gLft && !this.isFrontRowCell(gx - 1, gy) &&
+                    (!this.isWall(gx - 1, gy + 1) || !this.isWall(gx - 1, gy + 2))) return true;
+                if (!gRgt && !this.isFrontRowCell(gx + 1, gy) &&
+                    (!this.isWall(gx + 1, gy + 1) || !this.isWall(gx + 1, gy + 2))) return true;
+                // 侧边暴露或邻格是立面 → side_l (tile_0015) / side_r (tile_0013)
+                if (gLft || this.isFrontRowCell(gx - 1, gy)) return true;
+                if (gRgt || this.isFrontRowCell(gx + 1, gy)) return true;
                 return false;
             }
 
@@ -2903,7 +3172,9 @@ const RENDER_BUFFER = 2;
                 const camFracY = this.renderCamY - camIntY;
 
                 this.ctx.save();
-                this.ctx.translate(this.gridOffsetX - camFracX * this.cellWidth, this.gridOffsetY - camFracY * this.cellHeight);
+                const tx1 = Math.round(this.gridOffsetX - camFracX * this.cellWidth);
+                const ty1 = Math.round(this.gridOffsetY - camFracY * this.cellHeight);
+                this.ctx.translate(tx1, ty1);
                 this.ctx.strokeStyle = 'rgba(255, 157, 58, 0.6)';
                 this.ctx.lineWidth = 3;
                 this.ctx.setLineDash([8, 4]);
@@ -2944,11 +3215,15 @@ const RENDER_BUFFER = 2;
                         
                         this.tickTimer(timestamp);
                         this.checkBooster(timestamp);
-                        if (this.autoMoveActive) {
+                        if (this.dashActive) {
+                            this.updateDash(timestamp);
+                        } else if (this.autoMoveActive) {
                             this.updateAutoMove(timestamp);
                         } else {
                             this.updateMovement(timestamp);
                         }
+                        this.updateDashUI();
+
                         if (this.petrifying) {
                             this.updatePetrify(timestamp);
                         }
@@ -2957,6 +3232,7 @@ const RENDER_BUFFER = 2;
                         }
                         this.updatePlayerAnimation(dt);
                         this.updateFogAnimation(dt);
+                        this.updateRevealedRoomStatus();
                         const isHighlightMode = this.chestOpenMode === 'voidStep' || this.chestOpenMode === 'magneticGlove';
                         if (!isHighlightMode) {
                             this.render();
@@ -2981,6 +3257,7 @@ const RENDER_BUFFER = 2;
             updateMovement(timestamp) {
                 try {
                     if (this.gameOver || this.petrifying || this.victoryAnimating) return;
+                    if (this.dashActive) return;
                     if (this.chestOpenMode) {
                         return;
                     }
@@ -3002,6 +3279,8 @@ const RENDER_BUFFER = 2;
                     }
 
                     if (mdx !== 0 || mdy !== 0) {
+                        this.moveDirX = mdx;
+                        this.moveDirY = mdy;
                         this.playerIsMoving = true;
                         const angle = Math.atan2(mdy, mdx) * 180 / Math.PI;
                         if (angle >= -45 && angle < 45) this.playerDirection = 'right';
@@ -3055,8 +3334,126 @@ const RENDER_BUFFER = 2;
                 this.checkRemnantPickup();
                 this.updateUI();
 
+                // v6: 检查是否走入隐藏通道
+                const cell = this.map.globalGrid[gy][gx];
+                if (cell === CELL_TYPE.HIDDEN_PASSAGE || cell === CELL_TYPE.HIDDEN_FLOOR) {
+                    this.revealHiddenRoom(gx, gy);
+                }
+
+                // v6: 检查是否离开了已揭晓区域（离开2格以上则隐藏）
+                if (this.revealedBackup) {
+                    let inArea = false;
+                    for (const [dx, dy] of [[0,0],[0,1],[0,-1],[1,0],[-1,0]]) {
+                        if ((`${gy + dy},${gx + dx}`) in this.revealedBackup) { inArea = true; break; }
+                    }
+                    if (!inArea) {
+                        this.hideRevealedRoom();
+                    }
+                }
+
                 if ((this.keysDown.up || this.keysDown.down || this.keysDown.left || this.keysDown.right) || this.joystickDir) {
                     this.checkChestCollision();
+                }
+            }
+
+            // v6: 揭晓隐藏房间（可逆：记录备份，离开时恢复）
+            revealHiddenRoom(startGX, startGY) {
+                const toReveal = [];
+                const queue = [{ gx: startGX, gy: startGY }];
+                const visited = new Set();
+
+                while (queue.length > 0) {
+                    const { gx, gy } = queue.shift();
+                    const key = `${gx},${gy}`;
+                    if (visited.has(key)) continue;
+                    visited.add(key);
+
+                    const cell = this.map.globalGrid[gy]?.[gx];
+                    if (cell === CELL_TYPE.HIDDEN_PASSAGE ||
+                        cell === CELL_TYPE.HIDDEN_FLOOR ||
+                        cell === CELL_TYPE.HIDDEN_WALL) {
+                        toReveal.push({ gx, gy });
+
+                        for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+                            const nx = gx + dx, ny = gy + dy;
+                            if (nx >= 0 && nx < TOTAL_COLS && ny >= 0 && ny < TOTAL_ROWS) {
+                                queue.push({ gx: nx, gy: ny });
+                            }
+                        }
+                    }
+                }
+
+                if (toReveal.length === 0) return;
+
+                // 备份原始值，再覆盖为普通类型
+                this.revealedBackup = this.revealedBackup || {};
+                let matchedRoomId = null;
+                for (const { gx, gy } of toReveal) {
+                    const key = `${gy},${gx}`;
+                    if (!(key in this.revealedBackup)) {
+                        this.revealedBackup[key] = this.map.globalGrid[gy][gx];
+                    }
+                    const cell = this.map.globalGrid[gy][gx];
+                    if (cell === CELL_TYPE.HIDDEN_FLOOR) {
+                        this.map.globalGrid[gy][gx] = CELL_TYPE.PATH;
+                    } else if (cell === CELL_TYPE.HIDDEN_WALL) {
+                        this.map.globalGrid[gy][gx] = CELL_TYPE.WALL;
+                    } else if (cell === CELL_TYPE.HIDDEN_PASSAGE) {
+                        this.map.globalGrid[gy][gx] = CELL_TYPE.PATH;
+                    }
+                    // 标记已探索
+                    this.map.markExplored(gy, gx);
+                    this.map.markSeen(gy, gx);
+                }
+
+                // 在该隐藏房间内放置宝箱
+                if (this.map.hiddenRooms) {
+                    for (const room of this.map.hiddenRooms) {
+                        const b = room.getBounds();
+                        if (startGX >= b.left && startGX <= b.right &&
+                            startGY >= b.top && startGY <= b.bottom) {
+                            matchedRoomId = room.id;
+                            for (const pos of (room.chestPos || [])) {
+                                if (pos.row >= 0 && pos.row < TOTAL_ROWS &&
+                                    pos.col >= 0 && pos.col < TOTAL_COLS) {
+                                    this.map.globalGrid[pos.row][pos.col] = CELL_TYPE.CHEST;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                this.revealedRoomId = matchedRoomId;
+            }
+
+            // 隐藏揭晓的房间（恢复备份）
+            hideRevealedRoom() {
+                if (!this.revealedBackup) return;
+                for (const [key, value] of Object.entries(this.revealedBackup)) {
+                    const [gy, gx] = key.split(',').map(Number);
+                    if (gy >= 0 && gy < TOTAL_ROWS && gx >= 0 && gx < TOTAL_COLS) {
+                        this.map.globalGrid[gy][gx] = value;
+                    }
+                }
+                this.revealedBackup = null;
+                this.revealedRoomId = null;
+            }
+
+            // 每帧检查玩家是否离开了揭晓的房间
+            // 每帧检查玩家是否离开了揭晓的房间（1格容差，防止边界抖动）
+            updateRevealedRoomStatus() {
+                if (!this.revealedBackup) return;
+                const gx = this.map.playerGlobalX;
+                const gy = this.map.playerGlobalY;
+                if (gx === undefined || gy === undefined) return;
+                // 检查玩家是否在revealed区域或相邻1格范围
+                let inArea = false;
+                for (const [dx, dy] of [[0,0],[0,1],[0,-1],[1,0],[-1,0]]) {
+                    const key = `${gy + dy},${gx + dx}`;
+                    if (key in this.revealedBackup) { inArea = true; break; }
+                }
+                if (!inArea) {
+                    this.hideRevealedRoom();
                 }
             }
 
@@ -3068,7 +3465,12 @@ const RENDER_BUFFER = 2;
             }
 
             setupEventListeners() {
-                document.getElementById('backpack-btn').addEventListener('click', () => this.showBackpack());
+                const backpackBtn = document.getElementById('backpack-btn');
+                backpackBtn.addEventListener('click', () => this.showBackpack());
+                backpackBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.showBackpack(); });
+                const dashBtn = document.getElementById('dash-btn');
+                dashBtn.addEventListener('click', () => this.activateDash());
+                dashBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.activateDash(); });
                 document.getElementById('overlay-close').addEventListener('click', () => this.hideOverlay());
                 document.getElementById('overlay').addEventListener('click', (e) => {
                     if (e.target.id === 'overlay') this.hideOverlay();
@@ -3460,6 +3862,150 @@ const RENDER_BUFFER = 2;
                     btn.classList.remove('active');
                     btn.textContent = '共鸣';
                     btn.disabled = this.echoCount < BOOST_ECHO_COST;
+                }
+            }
+
+            activateDash() {
+                if (this.gameOver || this.petrifying || this.victoryAnimating) return;
+                if (this.dashActive) return;
+                if (this.autoMoveActive) return;
+                if (performance.now() < this.dashCooldownEnd) return;
+                if (this.chestOpenMode) return;
+
+                const dx = this.moveDirX;
+                const dy = this.moveDirY;
+                const mag = Math.sqrt(dx * dx + dy * dy);
+                if (mag < 0.001) return;
+                const ndx = dx / mag;
+                const ndy = dy / mag;
+
+                const angle = Math.atan2(ndy, ndx) * 180 / Math.PI;
+                if (angle >= -45 && angle < 45) this.playerDirection = 'right';
+                else if (angle >= 45 && angle < 135) this.playerDirection = 'down';
+                else if (angle >= -135 && angle < -45) this.playerDirection = 'up';
+                else this.playerDirection = 'left';
+
+                const dashDist = 2 * this.cellWidth;
+                const stepSize = 2;  // 2px 步进
+
+                // AABB 沿方向扫：每 2px 检查碰撞盒是否能放入
+                let furthestDist = 0;
+                for (let dist = stepSize; dist <= dashDist; dist += stepSize) {
+                    const checkX = this.playerPixelX + ndx * dist;
+                    const checkY = this.playerPixelY + ndy * dist;
+                    const bounds = this.getPlayerBounds(checkX, checkY);
+                    if (!this.isAreaWalkable(bounds.left, bounds.right, bounds.top, bounds.bottom)) {
+                        break;
+                    }
+                    furthestDist = dist;
+                }
+
+                if (furthestDist < stepSize) return;
+
+                this.dashActive = true;
+                this.dashFromX = this.playerPixelX;
+                this.dashFromY = this.playerPixelY;
+                this.dashTargetX = this.playerPixelX + ndx * furthestDist;
+                this.dashTargetY = this.playerPixelY + ndy * furthestDist;
+                this.dashStartTime = performance.now();
+                this.dashCooldownEnd = performance.now() + 3000;
+                this.playerIsMoving = true;
+
+                this.playDashSFX();
+                this.updateDashUI();
+            }
+
+            updateDash(timestamp) {
+                if (!this.dashActive) return;
+
+                const elapsed = (timestamp - this.dashStartTime) / 1000;
+                const t = Math.min(elapsed / this.dashDuration, 1.0);
+                const eased = 1 - Math.pow(1 - t, 2);
+
+                this.playerPixelX = this.dashFromX + (this.dashTargetX - this.dashFromX) * eased;
+                this.playerPixelY = this.dashFromY + (this.dashTargetY - this.dashFromY) * eased;
+
+                // 冲刺中途检测：如果进入隐藏格，重新揭晓（防止房间回藏后卡墙）
+                const midGX = Math.floor(this.playerPixelX / this.cellWidth);
+                const midGY = Math.floor(this.playerPixelY / this.cellHeight);
+                const midCell = this.map.globalGrid[midGY]?.[midGX];
+                if (midCell === CELL_TYPE.HIDDEN_PASSAGE || midCell === CELL_TYPE.HIDDEN_FLOOR) {
+                    this.revealHiddenRoom(midGX, midGY);
+                }
+
+                if (t >= 1.0) {
+                    this.playerPixelX = this.dashTargetX;
+                    this.playerPixelY = this.dashTargetY;
+                    this.map.playerGlobalX = Math.floor(this.playerPixelX / this.cellWidth);
+                    this.map.playerGlobalY = Math.floor(this.playerPixelY / this.cellHeight);
+
+                    // 冲刺后安全校验：用 AABB 检查（与移动一致），而非单点 isGridWalkable
+                    const dashEndBounds = this.getPlayerBounds(this.playerPixelX, this.playerPixelY);
+                    if (!this.isAreaWalkable(dashEndBounds.left, dashEndBounds.right, dashEndBounds.top, dashEndBounds.bottom)) {
+                        const gx = this.map.playerGlobalX;
+                        const gy = this.map.playerGlobalY;
+                        let found = false;
+                        for (let r = 1; r <= 3 && !found; r++) {
+                            const candidates = [];
+                            for (let dr = -r; dr <= r; dr++) {
+                                for (let dc = -r; dc <= r; dc++) {
+                                    if (Math.abs(dr) !== r && Math.abs(dc) !== r) continue;
+                                    const ngx = gx + dc, ngy = gy + dr;
+                                    if (this.isGridWalkable(ngx, ngy)) {
+                                        candidates.push({ ngx, ngy });
+                                    }
+                                }
+                            }
+                            if (candidates.length > 0) {
+                                const best = candidates[0];
+                                this.map.playerGlobalX = best.ngx;
+                                this.map.playerGlobalY = best.ngy;
+                                this.playerPixelX = (best.ngx + 0.5) * this.cellWidth;
+                                this.playerPixelY = (best.ngy + 0.5) * this.cellHeight;
+                                found = true;
+                            }
+                        }
+                        if (!found) {
+                            // 最后保底：回退到冲刺起点
+                            this.playerPixelX = this.dashFromX;
+                            this.playerPixelY = this.dashFromY;
+                            this.map.playerGlobalX = Math.floor(this.dashFromX / this.cellWidth);
+                            this.map.playerGlobalY = Math.floor(this.dashFromY / this.cellHeight);
+                        }
+                    }
+
+                    this.map.markExplored(this.map.playerGlobalY, this.map.playerGlobalX);
+
+                    this.dashActive = false;
+                    this.playerIsMoving = false;
+
+                    this.checkRemnantPickup();
+                    this.updateUI();
+                    this.updateScreenPos();
+                    this.updateDashUI();
+                }
+
+                this.calcCamera(0.016);
+                this.updateScreenPos();
+            }
+
+            updateDashUI() {
+                const btn = document.getElementById('dash-btn');
+                if (!btn) return;
+                const now = performance.now();
+                if (this.dashActive) {
+                    btn.disabled = true;
+                    btn.classList.add('cooldown');
+                    btn.querySelector('.label').textContent = '冲刺中';
+                } else if (now < this.dashCooldownEnd) {
+                    btn.disabled = true;
+                    btn.classList.add('cooldown');
+                    const remaining = Math.ceil((this.dashCooldownEnd - now) / 1000);
+                    btn.querySelector('.label').textContent = remaining + 's';
+                } else {
+                    btn.disabled = false;
+                    btn.classList.remove('cooldown');
+                    btn.querySelector('.label').textContent = '冲刺';
                 }
             }
 
@@ -3908,7 +4454,9 @@ const RENDER_BUFFER = 2;
                 this.ctx.fillRect(0, 0, width, height);
 
                 this.ctx.save();
-                this.ctx.translate(this.gridOffsetX - camFracX * this.cellWidth, this.gridOffsetY - camFracY * this.cellHeight);
+                const tx = Math.round(this.gridOffsetX - camFracX * this.cellWidth);
+                const ty = Math.round(this.gridOffsetY - camFracY * this.cellHeight);
+                this.ctx.translate(tx, ty);
 
                 const visibleCells = [];
                 for (let vy = -RENDER_BUFFER; vy < VIEW_ROWS + extraRows + RENDER_BUFFER; vy++) {
@@ -3925,11 +4473,17 @@ const RENDER_BUFFER = 2;
                     }
                 }
 
-                // Pass 1: 地板层（所有格子，墙体下方也铺地板）
+                // Helper: check if cell should render as wall (hidden types also render as wall)
+                const isWallCell = (cell) => cell === CELL_TYPE.WALL ||
+                    cell === CELL_TYPE.HIDDEN_WALL ||
+                    cell === CELL_TYPE.HIDDEN_FLOOR ||
+                    cell === CELL_TYPE.HIDDEN_PASSAGE;
+
+                // Pass 1: 地板层 + 隐藏墙模拟地板
                 for (const vc of visibleCells) {
                     const { cell, cellX, cellY, gx, gy } = vc;
 
-                    if (cell === CELL_TYPE.WALL) {
+                    if (isWallCell(cell)) {
                         this.drawFloorTile(cellX, cellY, this.cellWidth, this.cellHeight,
                             this.selectFloorTile(gx, gy));
                         continue;
@@ -3946,10 +4500,11 @@ const RENDER_BUFFER = 2;
                     }
                 }
 
-                // Pass 2a: 墙体层（顶面 + 立面，覆盖地板，不含上边缘 tile）
+                // Pass 2a: 墙体层（不含覆盖玩家的格 → Pass 2b 渲染）
                 for (const vc of visibleCells) {
-                    if (vc.cell !== CELL_TYPE.WALL) continue;
-                    if (this.isTopEdgeCell(vc.gx, vc.gy)) continue;
+                    if (!isWallCell(vc.cell)) continue;
+                    // 需要覆盖玩家的格 → 去 Pass 2b 渲染
+                    if (this.shouldRenderOverPlayer(vc.gx, vc.gy)) continue;
                     this.drawWall(vc.cellX, vc.cellY, vc.gx, vc.gy);
                 }
 
@@ -3973,6 +4528,11 @@ const RENDER_BUFFER = 2;
 
                 this.drawAutoMovePath();
 
+                // 调试碰撞盒
+                if (typeof showCollisionBox !== 'undefined' && showCollisionBox) {
+                    this.drawCollisionBox();
+                }
+
                 if (this.petrifying) {
                     this.drawPetrifyingPlayer();
                 } else if (this.victoryAnimating) {
@@ -3981,12 +4541,15 @@ const RENDER_BUFFER = 2;
                     this.drawPlayer();
                 }
 
-                // Pass 2b-wall: 上边缘墙体（玩家上层，覆盖玩家形成深度感）
+                // Pass 2b-wall: 覆盖玩家形成伪3D深度（顶部盖 + 侧边 + 侧转正连接）
                 this.ctx.save();
-                this.ctx.translate(this.gridOffsetX - camFracX * this.cellWidth, this.gridOffsetY - camFracY * this.cellHeight);
+                const tx2 = Math.round(this.gridOffsetX - camFracX * this.cellWidth);
+                const ty2 = Math.round(this.gridOffsetY - camFracY * this.cellHeight);
+                this.ctx.translate(tx2, ty2);
                 for (const vc of visibleCells) {
-                    if (vc.cell !== CELL_TYPE.WALL) continue;
-                    if (!this.isTopEdgeCell(vc.gx, vc.gy)) continue;
+                    if (!isWallCell(vc.cell)) continue;
+                    // 仅渲染需要覆盖玩家的格
+                    if (!this.shouldRenderOverPlayer(vc.gx, vc.gy)) continue;
                     this.drawWall(vc.cellX, vc.cellY, vc.gx, vc.gy);
                 }
                 this.ctx.restore();
@@ -4004,6 +4567,17 @@ const RENDER_BUFFER = 2;
             }
 
             drawWall(x, y, gx, gy) {
+                // v6: HIDDEN_PASSAGE — 仅在 tile_0040 立面(下方邻接 FLOOR)渲染门 tile
+                if (this.map.globalGrid[gy]?.[gx] === CELL_TYPE.HIDDEN_PASSAGE) {
+                    const grid = this.map.globalGrid;
+                    const isDoorway = gy + 1 < TOTAL_ROWS &&
+                        (grid[gy + 1]?.[gx] === CELL_TYPE.PATH || grid[gy + 1]?.[gx] === CELL_TYPE.FLOOR);
+                    if (isDoorway) {
+                        this.drawDoorTile(x, y, gx, gy);
+                        return;
+                    }
+                    // 非 tile_0040 → 正常墙体渲染
+                }
                 const w = this.cellWidth;
                 const h = this.cellHeight;
                 const tile = this.selectWallTile(gx, gy);
@@ -4020,6 +4594,52 @@ const RENDER_BUFFER = 2;
                     this.ctx.fillRect(x, y + h - 3, w, 3);
                 }
 
+                if (this.gridLinesEnabled) {
+                    this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+                    this.ctx.lineWidth = 0.5;
+                    this.ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+                }
+            }
+
+            // v6: 渲染隐藏通道门 tile
+            drawDoorTile(x, y, gx, gy) {
+                const w = this.cellWidth;
+                const h = this.cellHeight;
+                const grid = this.map.globalGrid;
+
+                // 计算此格所在立面行 HIDDEN_PASSAGE 簇的宽度
+                let clusterLeft = gx;
+                while (clusterLeft > 0 && grid[gy]?.[clusterLeft - 1] === CELL_TYPE.HIDDEN_PASSAGE) clusterLeft--;
+                let clusterRight = gx;
+                while (clusterRight + 1 < TOTAL_COLS && grid[gy]?.[clusterRight + 1] === CELL_TYPE.HIDDEN_PASSAGE) clusterRight++;
+                const clusterWidth = clusterRight - clusterLeft + 1;
+
+                let tile;
+                if (clusterWidth === 1) {
+                    tile = this.tiles.door.open_1w;
+                } else if (clusterWidth === 2) {
+                    tile = (gx === clusterLeft) ? this.tiles.door.open_2w_l : this.tiles.door.open_2w_r;
+                } else {
+                    // 簇宽度 >2: 不做门渲染，退回到正常墙体
+                    const wallTile = this.selectWallTile(gx, gy);
+                    if (wallTile && wallTile.complete && wallTile.naturalWidth > 0) {
+                        this.ctx.drawImage(wallTile, x, y, w, h);
+                    }
+                    return;
+                }
+                if (tile && tile.complete && tile.naturalWidth > 0) {
+                    this.ctx.drawImage(tile, x, y, w, h);
+                } else {
+                    // 后备：绘制棕色门
+                    this.ctx.fillStyle = '#5a3a1a';
+                    this.ctx.fillRect(x + w * 0.1, y, w * 0.8, h);
+                    this.ctx.fillStyle = '#8B6914';
+                    this.ctx.fillRect(x + w * 0.15, y + h * 0.1, w * 0.3, h * 0.7);
+                    this.ctx.fillRect(x + w * 0.55, y + h * 0.1, w * 0.3, h * 0.7);
+                    this.ctx.strokeStyle = '#3a2510';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.strokeRect(x + w * 0.1, y, w * 0.8, h);
+                }
                 if (this.gridLinesEnabled) {
                     this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
                     this.ctx.lineWidth = 0.5;
@@ -4241,8 +4861,76 @@ const RENDER_BUFFER = 2;
                 this.ctx.shadowBlur = 0;
             }
 
+            drawCollisionBox() {
+                const cw = this.cellWidth;
+                const ch = this.cellHeight;
+                const sx = Math.round(this.gridOffsetX - this.camStartX * cw);
+                const sy = Math.round(this.gridOffsetY - this.camStartY * ch);
+
+                const footRatio = (typeof collisionBoxFootRatio !== 'undefined') ? collisionBoxFootRatio : 0.5;
+
+                // 绘制玩家碰撞盒 AABB（黄色半透明填充 + 黄边框）
+                const pBounds = this.getPlayerBounds(this.playerPixelX, this.playerPixelY);
+                this.ctx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+                this.ctx.fillRect(sx + pBounds.left, sy + pBounds.top,
+                    pBounds.right - pBounds.left, pBounds.bottom - pBounds.top);
+                this.ctx.strokeStyle = '#ffdd00';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(sx + pBounds.left, sy + pBounds.top,
+                    pBounds.right - pBounds.left, pBounds.bottom - pBounds.top);
+
+                // 绘制脚部比率辅助线（白点标记底部中心）
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.beginPath();
+                this.ctx.arc(sx + this.playerPixelX, sy + pBounds.bottom, 2, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // 冲刺时：绘制目标碰撞盒（橙色）和路径扫过的碰撞盒（绿色/红色）
+                if (this.dashActive) {
+                    const dBounds = this.getPlayerBounds(this.dashTargetX, this.dashTargetY);
+                    this.ctx.strokeStyle = '#ff8800';
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.setLineDash([4, 3]);
+                    this.ctx.strokeRect(sx + dBounds.left, sy + dBounds.top,
+                        dBounds.right - dBounds.left, dBounds.bottom - dBounds.top);
+                    this.ctx.setLineDash([]);
+
+                    // 沿路径每隔一定距离画碰撞盒
+                    const dx = this.dashTargetX - this.playerPixelX;
+                    const dy = this.dashTargetY - this.playerPixelY;
+                    const dashDist = Math.sqrt(dx * dx + dy * dy);
+                    if (dashDist > 0) {
+                        const ndx = dx / dashDist;
+                        const ndy = dy / dashDist;
+                        const step = 10; // 每10px画一个采样点
+                        for (let d = step; d < dashDist; d += step) {
+                            const px = this.playerPixelX + ndx * d;
+                            const py = this.playerPixelY + ndy * d;
+                            const b = this.getPlayerBounds(px, py);
+                            const w = this.isAreaWalkable(b.left, b.right, b.top, b.bottom);
+                            this.ctx.fillStyle = w ? 'rgba(0, 255, 68, 0.15)' : 'rgba(255, 0, 0, 0.3)';
+                            this.ctx.fillRect(sx + b.left, sy + b.top,
+                                b.right - b.left, b.bottom - b.top);
+                        }
+                    }
+                }
+
+                // 绘制玩家所在格子虚线参考
+                const gx = this.map.playerGlobalX;
+                const gy = this.map.playerGlobalY;
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                this.ctx.lineWidth = 1;
+                this.ctx.setLineDash([2, 6]);
+                this.ctx.strokeRect(sx + gx * cw, sy + gy * ch, cw, ch);
+                this.ctx.setLineDash([]);
+
+                this.ctx.lineWidth = 1;
+            }
+
             updatePlayerAnimation(dt) {
-                if (this.playerIsMoving) {
+                if (this.dashActive) {
+                    this.playerFrameIndex = 5;
+                } else if (this.playerIsMoving) {
                     this.playerAnimationTimer += dt * 1000;
                     const frameTime = 1000 / this.playerAnimationSpeed;
                     this.playerFrameIndex = (this.playerAnimationTimer / frameTime) % 6;
@@ -4275,7 +4963,10 @@ const RENDER_BUFFER = 2;
                     for (let gy = 0; gy < TOTAL_ROWS; gy++) {
                         for (let gx = 0; gx < TOTAL_COLS; gx++) {
                             const cell = this.map.globalGrid[gy][gx];
-                            if (cell === CELL_TYPE.WALL) {
+                            if (cell === CELL_TYPE.WALL ||
+                                cell === CELL_TYPE.HIDDEN_WALL ||
+                                cell === CELL_TYPE.HIDDEN_FLOOR ||
+                                cell === CELL_TYPE.HIDDEN_PASSAGE) {
                                 this.minimapCtx.fillStyle = '#2a2a2a';
                                 this.minimapCtx.fillRect(gx * cellW, gy * cellH, cellW, cellH);
                             } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
@@ -4302,7 +4993,10 @@ const RENDER_BUFFER = 2;
                     for (const key of this.map.seenCells) {
                         const [gy, gx] = key.split(',').map(Number);
                         const cell = this.map.globalGrid[gy][gx];
-                        if (cell === CELL_TYPE.WALL) {
+                        if (cell === CELL_TYPE.WALL ||
+                            cell === CELL_TYPE.HIDDEN_WALL ||
+                            cell === CELL_TYPE.HIDDEN_FLOOR ||
+                            cell === CELL_TYPE.HIDDEN_PASSAGE) {
                             this.minimapCtx.fillStyle = '#444';
                         } else if (cell === CELL_TYPE.PATH || cell === CELL_TYPE.RUIN || cell === CELL_TYPE.HIGH_COST) {
                             this.minimapCtx.fillStyle = '#666';
@@ -4335,6 +5029,40 @@ const RENDER_BUFFER = 2;
                                     gy * cellH - 0.5,
                                     1, 1
                                 );
+                            }
+                        }
+                    }
+                }
+
+                if (typeof hiddenRoomsHighlight !== 'undefined' && hiddenRoomsHighlight && this.map.hiddenRooms) {
+                    for (const room of this.map.hiddenRooms) {
+                        // 绘制半透明底色标记整个房间区域
+                        this.minimapCtx.fillStyle = 'rgba(255, 50, 255, 0.35)';
+                        this.minimapCtx.fillRect(
+                            room.gridCol * cellW,
+                            room.gridRow * cellH,
+                            room.width * cellW,
+                            room.height * cellH
+                        );
+                        // 绘制亮色边框
+                        this.minimapCtx.strokeStyle = '#ff00ff';
+                        this.minimapCtx.lineWidth = 1;
+                        this.minimapCtx.strokeRect(
+                            room.gridCol * cellW + 0.5,
+                            room.gridRow * cellH + 0.5,
+                            room.width * cellW - 1,
+                            room.height * cellH - 1
+                        );
+                        // 逐个 HIDDEN_FLOOR 格点亮
+                        for (let dy = 0; dy < room.height; dy++) {
+                            for (let dx = 0; dx < room.width; dx++) {
+                                const gx = room.gridCol + dx;
+                                const gy = room.gridRow + dy;
+                                if (gy < TOTAL_ROWS && gx < TOTAL_COLS &&
+                                    this.map.globalGrid[gy][gx] === CELL_TYPE.HIDDEN_FLOOR) {
+                                    this.minimapCtx.fillStyle = '#ff44ff';
+                                    this.minimapCtx.fillRect(gx * cellW + 0.5, gy * cellH + 0.5, cellW - 1, cellH - 1);
+                                }
                             }
                         }
                     }
@@ -4486,7 +5214,7 @@ const RENDER_BUFFER = 2;
                 this.highlightVoidStepTargets();
 
                 const handler = (e) => {
-                    const rect = this.scrollContainer.getBoundingClientRect();
+                    const rect = this.canvas.getBoundingClientRect();
                     const clickX = e.clientX - rect.left;
                     const clickY = e.clientY - rect.top;
 
@@ -4577,7 +5305,7 @@ const RENDER_BUFFER = 2;
                 this.highlightChestsOnScreenGlobal(chests);
 
                 const handler = (e) => {
-                    const rect = this.scrollContainer.getBoundingClientRect();
+                    const rect = this.canvas.getBoundingClientRect();
                     const clickX = e.clientX - rect.left;
                     const clickY = e.clientY - rect.top;
 
@@ -5091,6 +5819,12 @@ const RENDER_BUFFER = 2;
                 this.autoMoveActive = false;
                 this.autoMovePath = [];
                 this.autoMoveTarget = null;
+                
+                this.dashActive = false;
+                this.dashCooldownEnd = 0;
+                
+                this.moveDirX = 0;
+                this.moveDirY = 1;
                 
                 this.playerFrameIndex = 0;
                 this.playerAnimationTimer = 0;
