@@ -48,12 +48,14 @@ export class GameCoreBridge {
      * 生成世界（替换旧 generateWorld）
      */
     generateWorld() {
-        // 初始化游戏
+        // 初始化核心游戏（传入视野半径，与 fog-renderer 保持一致）
         this.game = new Game({
             mazeConfig: {
                 ...this.mazeConfig,
                 seed: this.seed,
             },
+            viewInnerR: 2,
+            viewOuterR: 4,
         });
 
         // 初始化背包
@@ -89,7 +91,7 @@ export class GameCoreBridge {
         // 同步视野记录
         this.exploredCells = snap.explored;
         this.seenCells = snap.seen;
-        // seenCellsTime 由 fog 更新时写入
+        this.seenCellsTime = snap.seenCellsTime || {};
 
         // 同步条件宝箱
         this.chestConditional = snap.chestConditional || {};
@@ -155,10 +157,15 @@ export class GameCoreBridge {
      * 标记已看见（兼容旧 markSeen）
      */
     markSeen(gy, gx) {
+        const now = performance?.now() ?? Date.now();
         if (this.game && this.game.player) {
-            this.game.player.markSeen(gx, gy, performance?.now() ?? Date.now());
+            this.game.player.markSeen(gx, gy, now);
         }
-        this.seenCells.add(`${gy},${gx}`);
+        const key = `${gy},${gx}`;
+        if (!this.seenCells.has(key)) {
+            this.seenCellsTime[key] = now;
+        }
+        this.seenCells.add(key);
     }
 
     /**

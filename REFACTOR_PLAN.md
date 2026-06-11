@@ -175,7 +175,7 @@ src/core/
 - 功能与原有 mist.html 一致
 
 ### 状态
-⬜ 待开始
+✅ 已完成（提取结果详见 Phase 2b、2c）
 
 ---
 
@@ -239,7 +239,7 @@ src/render/
 - 微信小游戏使用 wx.createCanvas() 而不是 document.createElement('canvas')
 
 ### 状态
-⬜ 待开始
+✅ 已完成（5个模块已提取：camera / tile-renderer / sprite-renderer / fog-renderer / hud-renderer）
 
 ---
 
@@ -294,15 +294,16 @@ src/render/
 
 **Phase 0 → Phase 1 → Phase 1.5 → Phase 2b → Phase 2c → Phase 3 → Phase 4 → Phase 5**
 
-当前进度：Phase 3（渲染层重构）
+当前进度：Phase 4（新版 Web 入口）
 
 ## 已完成阶段
 
 - ✅ Phase 0: 项目清理
 - ✅ Phase 1: 全新迷宫生成器（MST + A* + 房间摆放）
 - ✅ Phase 1.5: 砖块式墙体系统（_fixBrickConnections）
+- ✅ Phase 2: 核心游戏逻辑重构（提取到独立模块，详见 Phase 2b、2c）
 - ✅ Phase 2b: 核心游戏逻辑模块（player/fog/game/inventory/audio/storage）
 - ✅ Phase 2c: 桥接层接入 mist.html（替换 GameMapFree）
-- ⬜ Phase 3: 渲染层重构
+- ✅ Phase 3: 渲染层重构（camera / tile-renderer / sprite-renderer / fog-renderer / hud-renderer）
 - ⬜ Phase 4: 新版 Web 入口
 - ⬜ Phase 5: 微信小游戏适配

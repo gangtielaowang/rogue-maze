@@ -155,6 +155,7 @@ export class Game {
             exit: this.player ? { x: this.player.exitX, y: this.player.exitY } : null,
             explored: this.player ? this.player.exploredCells : null,
             seen: this.player ? this.player.seenCells : null,
+            seenCellsTime: this.player ? this.player.seenCellsTime : {},
             chestConditional: this.chestConditional,
             hiddenRooms: this.hiddenRooms,
             rooms: this.rooms,
