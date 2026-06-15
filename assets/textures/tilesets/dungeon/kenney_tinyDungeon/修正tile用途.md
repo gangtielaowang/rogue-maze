@@ -63,3 +63,13 @@ tile_0056.png 	45度向左上移动的矿车
 tile_0057.png 	墙体立面的左边缘
 tile_0058.png 	
 tile_0059.png 	墙体立面的右边缘
+
+tile_0089.png 	关闭的宝箱
+tile_0090.png 	打开一半的宝箱
+tile_0091.png 	已经打开的宝箱
+
+tile_0109.png   怪物，独眼光头人
+tile_0111.png 	怪物，邪恶魔法师
+
+tile_0120.png 	怪物，小蝙蝠
+tile_0121.png 	怪物，白色幽灵

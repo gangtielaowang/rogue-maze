@@ -29,6 +29,14 @@ export const DEFAULT_CONFIG = {
     // === 隐藏房间 ===
     hiddenRoomCount: { min: 3, max: 5 },  // 隐藏房间数量范围
 
+    // === 宝箱参数 ===
+    chest: {
+        placeChance: 0.55,          // 每个房间生成宝箱的概率
+        lockedChance: 0.25,        // 宝箱被锁定的概率
+        blockedByDefault: true,    // 宝箱格默认是否可穿越（true=不可穿越）
+        animDuration: 400,         // 打开动画时长(ms)
+    },
+
     // === 起点终点 ===
     startEndMinDist: 6,     // 起点终点最小曼哈顿距离（以房间数为单位）
 

@@ -16,14 +16,16 @@
 
 const DEFAULT_OPTIONS = {
     circleRatio: 1.28,
-    frameScale: 1.8,
+    frameScale: 2.8,
     cellMult: 0.7,
-    normalInner: 4.3,
-    normalOuter: 5.0,
+    normalInner: 2,
+    normalOuter: 4.5,
     boostInner: 4,
     boostOuter: 7,
     dissolveMs: 500,
     fogFrames: [],
+    flickerAmp: 1,
+    flickerSpeed: 1,
 };
 
 const RENDER_BUFFER = 2;
@@ -89,16 +91,19 @@ export class FogRenderer {
      * - ~35px 羽化边缘，从全透明平滑过渡到迷雾
      * - 呼吸缩放 90%~120%，周期随机变化，营造火把照明般的忽闪感
      */
-    _drawVisionCutout(ctx, cx, cy, innerR, outerR, time) {
+    _drawVisionCutout(ctx, cx, cy, innerR, outerR, time, opts) {
         // ── 火把式呼吸：振幅 90%~120%，频率随时间随机变化 ──
-        const slowPhase = time * (0.6 + Math.sin(time * 0.08) * 0.3);
-        const fastPhase1 = time * (2.0 + Math.sin(time * 0.12) * 1.0);
-        const fastPhase2 = time * (3.5 + Math.sin(time * 0.2) * 1.5);
+        const flickerAmp = (opts && opts.flickerAmp !== undefined) ? opts.flickerAmp : 1;
+        const flickerSpeed = (opts && opts.flickerSpeed !== undefined) ? opts.flickerSpeed : 1;
+
+        const slowPhase = time * (0.6 + Math.sin(time * 0.08) * 0.3) * flickerSpeed;
+        const fastPhase1 = time * (2.0 + Math.sin(time * 0.12) * 1.0) * flickerSpeed;
+        const fastPhase2 = time * (3.5 + Math.sin(time * 0.2) * 1.5) * flickerSpeed;
 
         const breathe = 1.05
-            + Math.sin(slowPhase) * 0.10    // ±0.10 → 慢速主呼吸
-            + Math.sin(fastPhase1) * 0.04   // ±0.04 → 中速闪烁
-            + Math.sin(fastPhase2) * 0.03;  // ±0.03 → 快速抖动
+            + Math.sin(slowPhase) * 0.10 * flickerAmp    // ±0.10 → 慢速主呼吸
+            + Math.sin(fastPhase1) * 0.04 * flickerAmp   // ±0.04 → 中速闪烁
+            + Math.sin(fastPhase2) * 0.03 * flickerAmp;  // ±0.03 → 快速抖动
         // 范围 ≈ [0.88, 1.22]
 
         // ── 羽化参数 ──
@@ -150,6 +155,9 @@ export class FogRenderer {
     render(params) {
         if (!params.fogEnabled) return;
 
+        // ── 运行时 fogOpts 覆盖（调试面板实时调节） ──
+        const opts = params.fogOpts || this.opts;
+
         const dpr = params.dpr || window.devicePixelRatio || 1;
         const viewW = params.screenWidth;
         const viewH = params.screenHeight;
@@ -160,10 +168,10 @@ export class FogRenderer {
         const playerAbsY = Math.round(params.playerAbsY);
 
         // 视野半径
-        const innerR = (params.boosterActive ? this.opts.boostInner : this.opts.normalInner)
-            * cellSize * this.opts.cellMult;
-        const outerR = (params.boosterActive ? this.opts.boostOuter : this.opts.normalOuter)
-            * cellSize * this.opts.cellMult;
+        const innerR = (params.boosterActive ? opts.boostInner : opts.normalInner)
+            * cellSize * opts.cellMult;
+        const outerR = (params.boosterActive ? opts.boostOuter : opts.normalOuter)
+            * cellSize * opts.cellMult;
 
         // Step 1: 更新 seenCells
         this._updateSeenCells(
@@ -192,6 +200,7 @@ export class FogRenderer {
             this._fogCanvas.style.width = viewW + 'px';
             this._fogCanvas.style.height = viewH + 'px';
             this._fogCtx = this._fogCanvas.getContext('2d');
+            this._fogCtx.imageSmoothingEnabled = false;
             this._fogCtx.scale(dpr, dpr);
         }
 
@@ -204,9 +213,9 @@ export class FogRenderer {
         const hasFrame = frames && frames.length > 0
             && frames[0] && frames[0].complete && frames[0].naturalWidth > 0;
         const fogFrame = hasFrame ? frames[this._frameIndex || 0] : null;
-        const circleR = cellSize * this.opts.circleRatio;
-        const frameSize = circleR * this.opts.frameScale;
-        const dissolveMs = this.opts.dissolveMs;
+        const circleR = cellSize * opts.circleRatio;
+        const frameSize = Math.round(circleR * opts.frameScale);
+        const dissolveMs = opts.dissolveMs;
         const now = params.now || performance.now();
 
         // ── Phase 1: 格子分类 ──
@@ -388,7 +397,7 @@ export class FogRenderer {
                 if (dissolveAlpha !== undefined) {
                     if (fogFrame) {
                         fogCtx.globalAlpha = 0.9 * dissolveAlpha;
-                        fogCtx.drawImage(fogFrame, cx - frameSize / 2, cy - frameSize / 2, frameSize, frameSize);
+                        fogCtx.drawImage(fogFrame, Math.round(cx - frameSize / 2), Math.round(cy - frameSize / 2), frameSize, frameSize);
                         fogCtx.globalAlpha = 1;
                     }
                     continue;
@@ -414,7 +423,7 @@ export class FogRenderer {
 
                 if (frameAlpha > 0 && fogFrame) {
                     fogCtx.globalAlpha = frameAlpha;
-                    fogCtx.drawImage(fogFrame, cx - frameSize / 2, cy - frameSize / 2, frameSize, frameSize);
+                    fogCtx.drawImage(fogFrame, Math.round(cx - frameSize / 2), Math.round(cy - frameSize / 2), frameSize, frameSize);
                     fogCtx.globalAlpha = 1;
                 }
             }
@@ -425,7 +434,7 @@ export class FogRenderer {
         // ── Phase 4: 视野镂空（destination-out） ──
         fogCtx.save();
         fogCtx.globalCompositeOperation = 'destination-out';
-        this._drawVisionCutout(fogCtx, playerAbsX, playerAbsY, innerR, outerR, params.globalTime);
+        this._drawVisionCutout(fogCtx, playerAbsX, playerAbsY, innerR, outerR, params.globalTime, opts);
         fogCtx.restore();
 
         // ── 合成到主 canvas ──

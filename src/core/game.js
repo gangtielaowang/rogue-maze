@@ -16,6 +16,7 @@ import { DEFAULT_CONFIG } from '../maze/config.js';
 import { MazeGenerator } from '../maze/generator.js';
 import { Player } from './player.js';
 import { FOG_DEFAULTS, updateVisibility } from './fog.js';
+import { MonsterManager } from './monster.js';
 
 /**
  * 游戏状态枚举
@@ -47,6 +48,10 @@ export class Game {
         this.rooms = [];
         this.hiddenRooms = [];
         this.chestConditional = {};
+        this.chestStates = {}; // "row,col" → { type, state, openedAt }
+
+        // 怪物管理器
+        this.monsterManager = new MonsterManager();
 
         this._initMaze();
     }
@@ -66,6 +71,9 @@ export class Game {
         // 宝箱条件概率
         this._markConditionalChests();
 
+        // 初始化宝箱状态
+        this._initChestStates();
+
         // 创建玩家（注意：迷宫生成器返回 row/col，Player 用 x=col, y=row）
         this.player = new Player({
             startX: mazeData.startPosition.col,
@@ -79,6 +87,9 @@ export class Game {
 
         // 初始迷雾更新
         this._updateFog();
+
+        // 生成怪物
+        this.monsterManager.generateMonsters(this.grid, mapSize, mapSize, this.rooms);
 
         this.state = STATE.PLAYING;
     }
@@ -96,10 +107,70 @@ export class Game {
         }
     }
 
+    /** 初始化宝箱状态（基于网格和条件标记） */
+    _initChestStates() {
+        this.chestStates = {};
+        for (let gy = 0; gy < this.grid.length; gy++) {
+            for (let gx = 0; gx < this.grid[0].length; gx++) {
+                if (this.grid[gy][gx] === CELL.CHEST) {
+                    const key = `${gy},${gx}`;
+                    this.chestStates[key] = {
+                        type: this.chestConditional[key] ? 'locked' : 'normal',
+                        state: 'closed',
+                        openedAt: 0,
+                    };
+                }
+            }
+        }
+    }
+
+    /** 尝试打开指定位置的宝箱 */
+    openChest(gy, gx, timestamp) {
+        const key = `${gy},${gx}`;
+        const cs = this.chestStates[key];
+        if (!cs || cs.state !== 'closed') return { opened: false };
+
+        if (cs.type === 'locked') {
+            // TODO: 接入条件系统（如消耗回响、需要钥匙等）
+            // 目前锁定宝箱始终可打开，为以后预留扩展
+        }
+
+        cs.state = 'opened';
+        cs.openedAt = timestamp || Date.now();
+        return { opened: true };
+    }
+
+    /** 获取宝箱状态（供渲染层使用） */
+    getChestState(gy, gx) {
+        const key = `${gy},${gx}`;
+        return this.chestStates[key] || null;
+    }
+
     /** 更新迷雾 */
     _updateFog() {
         if (!this.player) return;
         updateVisibility(this.player, this.grid, this.viewInnerR, this.viewOuterR);
+    }
+
+    /**
+     * 更新所有怪物
+     * @param {number} dt - 帧间隔(ms)
+     * @param {{ x: number, y: number }|null} noiseSource - 当前帧的噪音源
+     * @param {boolean} [stealthActive=false] - 玩家是否隐身
+     * @param {number} [noiseLevel=1] - 玩家噪音倍率
+     * @param {Array<{x:number,y:number}>} [meatPositions] - 肉陷阱位置
+     */
+    updateMonsters(dt, noiseSource, stealthActive = false, noiseLevel = 1, meatPositions) {
+        if (this.state !== STATE.PLAYING || !this.player) return;
+        this.monsterManager.updateAll(
+            dt,
+            this.player.x,
+            this.player.y,
+            noiseSource,
+            stealthActive,
+            noiseLevel,
+            meatPositions
+        );
     }
 
     // ────────── 公开 API ──────────
@@ -157,8 +228,10 @@ export class Game {
             seen: this.player ? this.player.seenCells : null,
             seenCellsTime: this.player ? this.player.seenCellsTime : {},
             chestConditional: this.chestConditional,
+            chestStates: this.chestStates,
             hiddenRooms: this.hiddenRooms,
             rooms: this.rooms,
+            monsters: this.monsterManager.getMonsterStates(),
         };
     }
 

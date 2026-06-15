@@ -366,16 +366,66 @@ export class TileRenderer {
     }
 
     /**
-     * 绘制宝箱
+     * 绘制宝箱（基于贴图 + 动画）
+     * @param {number} x - 格子左上角像素 X
+     * @param {number} y - 格子左上角像素 Y
+     * @param {Object} chestState - 宝箱状态 { type, state, openedAt }
+     * @param {number} now - 当前时间戳 (performance.now)
+     * @param {number} animDuration - 打开动画时长(ms)
      */
-    drawChest(x, y, isConditional) {
+    drawChest(x, y, chestState, now, animDuration) {
+        const { ctx, cellWidth: w, cellHeight: h, tiles: t } = this;
+        const animDur = animDuration || 400;
+
+        let tile;
+        let isOpened = false;
+        let isLocked = chestState ? (chestState.type === 'locked') : false;
+
+        if (chestState && chestState.state === 'opened') {
+            const elapsed = now - (chestState.openedAt || 0);
+            isOpened = true;
+            if (elapsed < animDur && t.chest.opening) {
+                // 动画进行中：根据进度选帧
+                const progress = elapsed / animDur;
+                if (progress < 0.33) {
+                    tile = t.chest.closed;    // 89 → 关闭
+                } else if (progress < 0.66) {
+                    tile = t.chest.opening;   // 90 → 打开中
+                } else {
+                    tile = t.chest.opened;    // 91 → 已打开
+                }
+            } else {
+                tile = t.chest.opened; // 动画结束，显示已打开
+            }
+        } else {
+            // 关闭状态的宝箱
+            tile = t.chest.closed;
+        }
+
+        // 绘制宝箱贴图
+        if (tile && tile.complete && tile.naturalWidth > 0) {
+            ctx.drawImage(tile, x, y, w, h);
+        } else {
+            // 回退：纯色绘制
+            this._drawChestFallback(x, y, isLocked, isOpened);
+        }
+
+        // 锁定宝箱额外标记（锁头指示）
+        if (isLocked && !isOpened) {
+            ctx.fillStyle = 'rgba(255, 200, 100, 0.25)';
+            ctx.fillRect(x, y, w, h);
+        }
+    }
+
+    /** 纯色回退绘制（贴图未加载时） */
+    _drawChestFallback(x, y, isLocked, isOpened) {
         const { ctx, cellWidth: w, cellHeight: h } = this;
         const cx = x + w / 2;
         const cy = y + h / 2;
         const size = Math.min(w, h) * 0.35;
 
-        const glowColor = isConditional ? 'rgba(180, 130, 255, 0.8)' : COLORS.chestGlow;
-        const chestColor = isConditional ? '#9b7fd4' : COLORS.chest;
+        const chestColor = isOpened ? '#6b5a3a' : (isLocked ? '#9b7fd4' : '#c9a227');
+        const glowColor = isOpened ? 'rgba(100,80,50,0.5)' : (isLocked ? 'rgba(180, 130, 255, 0.8)' : '#ffd700');
 
         ctx.shadowColor = glowColor;
         ctx.shadowBlur = 15;
@@ -383,10 +433,10 @@ export class TileRenderer {
         ctx.fillRect(cx - size, cy - size * 0.6, size * 2, size * 1.2);
         ctx.shadowBlur = 0;
 
-        ctx.fillStyle = isConditional ? '#c4b5e8' : COLORS.chestGlow;
+        ctx.fillStyle = isOpened ? '#8a7a5a' : '#ffd700';
         ctx.fillRect(cx - 3, cy - size * 0.3, 6, size * 0.6);
 
-        if (isConditional) {
+        if (isLocked && !isOpened) {
             ctx.fillStyle = '#fff';
             ctx.font = `${size * 0.8}px sans-serif`;
             ctx.textAlign = 'center';
@@ -520,5 +570,33 @@ export class TileRenderer {
         ctx.font = `${Math.min(w, h) * 0.15}px serif`;
         ctx.textAlign = 'center';
         ctx.fillText('✧', cx, cy - baseHeight / 4);
+    }
+
+    /**
+     * 绘制目标标记（点击寻路的终点指示）
+     */
+    drawTargetMarker(x, y) {
+        const { ctx, cellWidth: w, cellHeight: h, tiles } = this;
+        const img = tiles.target_marker;
+        if (img && img.complete && img.naturalWidth > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.6;
+            ctx.drawImage(img, x, y, w, h);
+            ctx.restore();
+        } else {
+            // Fallback: 半透明闪烁圆圈
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            ctx.save();
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            const r = Math.min(w, h) * 0.35;
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 }

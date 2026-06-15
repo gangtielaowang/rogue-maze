@@ -32,6 +32,9 @@ const DROP_TABLE = [
     { id: 'capsule_extended_memory', name: '延忆',     icon: '🧠', category: 'persistent', weight: 10 },
     { id: 'capsule_echo_burst',    name: '回响爆发',   icon: '⚡', category: 'consumable', weight: 8 },
     { id: 'capsule_echo_shield',   name: '回响护盾',   icon: '🛡️', category: 'consumable', weight: 8 },
+    { id: 'capsule_stealth',       name: '隐身护盾',   icon: '🌫️', category: 'consumable', weight: 6 },
+    { id: 'capsule_stone',         name: '小石头',     icon: '🪨', category: 'consumable', weight: 12 },
+    { id: 'capsule_meat',          name: '肉',         icon: '🥩', category: 'consumable', weight: 8 },
     { id: 'capsule_treasure_vision', name: '觅宝视野', icon: '👁️', category: 'persistent', weight: 4 },
 ];
 

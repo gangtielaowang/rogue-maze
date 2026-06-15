@@ -9,7 +9,7 @@
 
 import { CELL } from './types.js';
 import { DEFAULT_CONFIG } from './config.js';
-import { RoomPlacer } from './room-placer.js';
+import { RoomPlacer, Random } from './room-placer.js';
 import { CorridorBuilder } from './corridor.js';
 
 export class MazeGenerator {
@@ -51,7 +51,10 @@ export class MazeGenerator {
         // 阶段3: 放置出口
         this._placeExit();
 
-        // 阶段4: 验证
+        // 阶段4: 放置宝箱
+        this._placeChests();
+
+        // 阶段5: 验证
         const validation = this._validate();
 
         return {
@@ -77,6 +80,47 @@ export class MazeGenerator {
         if (!this.endRoom) return;
         const ib = this.endRoom.interior;
         this.grid[this.endRoom.centerRow][this.endRoom.centerCol] = CELL.EXIT;
+    }
+
+    /** 在房间内放置宝箱 */
+    _placeChests() {
+        const chestCfg = this.config.chest;
+        if (!chestCfg) {
+            console.log('[Chest] 无宝箱配置，跳过');
+            return;
+        }
+        const rng = new Random(this.config.seed + 9999);
+        let totalChests = 0;
+
+        for (const room of this.rooms) {
+            // 隐藏房间和起点不放宝箱
+            if (room.type === 'hidden' || room.type === 'start') continue;
+
+            // 按概率决定是否放宝箱
+            if (rng.next() >= chestCfg.placeChance) continue;
+
+            const ib = room.interior;
+            // 收集房间内部所有地板格
+            const floorCells = [];
+            for (let r = ib.top; r <= ib.bottom; r++) {
+                for (let c = ib.left; c <= ib.right; c++) {
+                    if (this.grid[r][c] === CELL.FLOOR) {
+                        floorCells.push({ row: r, col: c });
+                    }
+                }
+            }
+            if (floorCells.length === 0) {
+                console.log(`[Chest] 房间 ${room.id} 内部无地板格，跳过`);
+                continue;
+            }
+
+            // 随机选一个位置放宝箱
+            const pos = rng.pick(floorCells);
+            this.grid[pos.row][pos.col] = CELL.CHEST;
+            room.chests.push({ row: pos.row, col: pos.col });
+            totalChests++;
+        }
+        console.log(`[Chest] 生成了 ${totalChests} 个宝箱`);
     }
 
     /** 验证迷宫 */

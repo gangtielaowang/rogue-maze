@@ -38,6 +38,7 @@ export class GameCoreBridge {
         this.seenCells = new Set();
         this.seenCellsTime = {};
         this.chestConditional = {};
+        this.chestStates = {}; // 同步 Game 的宝箱状态
         this.hiddenRooms = [];
 
         // 自动生成世界（与旧 GameMapFree 行为一致）
@@ -61,6 +62,12 @@ export class GameCoreBridge {
         // 初始化背包
         this.inventory = new Inventory();
         this.inventory.initRun();
+
+        // 回响数据
+        this.echoCount = this.inventory.echoCount;
+        this.echoCapacity = this.inventory.echoCapacity;
+        /** 最后一次开箱掉落信息（供HUD显示） */
+        this.lastChestDrop = null;
 
         // 同步兼容属性
         this._syncFromGame();
@@ -95,6 +102,9 @@ export class GameCoreBridge {
 
         // 同步条件宝箱
         this.chestConditional = snap.chestConditional || {};
+
+        // 同步宝箱状态
+        this.chestStates = snap.chestStates || {};
     }
 
     /** 同步条件宝箱 */
@@ -198,10 +208,174 @@ export class GameCoreBridge {
     }
 
     /**
+     * 尝试打开宝箱
+     * 锁定宝箱消耗 60 回响；普通宝箱免费。
+     * 打开后掉落随机物品。
+     * @returns {{ opened: boolean, drop: Object|null, message: string }}
+     */
+    openChest(gy, gx, timestamp) {
+        if (!this.game) return { opened: false, drop: null, message: '游戏未初始化' };
+        if (!this.inventory) return { opened: false, drop: null, message: '背包未初始化' };
+
+        const cs = this.game.chestStates[`${gy},${gx}`];
+        if (!cs || cs.state !== 'closed') return { opened: false, drop: null, message: '宝箱已打开' };
+
+        // 锁定宝箱需要消耗回响
+        if (cs.type === 'locked') {
+            const cost = 60;
+            if (this.inventory.echoCount < cost) {
+                return { opened: false, drop: null, message: `回响不足 (需要 ${cost})` };
+            }
+            this.inventory.spendEcho(cost);
+        }
+
+        // 执行打开
+        const result = this.game.openChest(gy, gx, timestamp);
+        if (!result.opened) return { opened: false, drop: null, message: '打开失败' };
+
+        // 掉落物品
+        const drop = this.inventory.getRandomDrop();
+        let dropMessage = '宝箱是空的';
+        if (drop) {
+            if (drop.category === 'consumable') {
+                // 消耗品直接给回响
+                this.inventory.addEcho(drop.id === 'capsule_echo_small' ? 50 : 120);
+                dropMessage = `获得 ${drop.icon} ${drop.name}`;
+            } else {
+                // 持续性物品加入背包
+                const added = this.inventory.addCapsule(drop.id);
+                if (added) {
+                    dropMessage = `获得 ${drop.icon} ${drop.name}`;
+                } else {
+                    dropMessage = '背包已满，物品丢失';
+                }
+            }
+        }
+
+        // 更新桥接层数据
+        this.lastChestDrop = { ...drop, message: dropMessage };
+        this.echoCount = this.inventory.echoCount;
+        this.echoCapacity = this.inventory.echoCapacity;
+        this._syncFromGame();
+
+        return { opened: true, drop, message: dropMessage };
+    }
+
+    /**
      * 检查是否胜利
      */
     hasWon() {
         return this.game && this.game.state === STATE.VICTORY;
+    }
+
+    /**
+     * 更新怪物
+     * @param {number} dt - 帧间隔 ms
+     * @param {{x:number,y:number}|null} noiseSource - 噪音源
+     * @param {boolean} [stealthActive=false] - 玩家是否隐身
+     * @param {number} [noiseLevel=1] - 玩家噪音倍率
+     */
+    updateMonsters(dt, noiseSource, stealthActive = false, noiseLevel = 1) {
+        if (this.game) {
+            this.game.updateMonsters(dt, noiseSource, stealthActive, noiseLevel, this._meatPositions);
+        }
+    }
+
+    /**
+     * 获取怪物数据（用于渲染）
+     */
+    getMonsters() {
+        return this.game?.monsterManager?.getMonsterStates() || [];
+    }
+
+    // ─────── 玩家应对手段 ───────
+
+    /** 肉陷阱位置列表 */
+    _meatPositions = [];
+
+    /** 玩家隐身状态 */
+    _stealthActive = false;
+
+    /**
+     * 开关隐身护盾
+     * @returns {boolean} 操作是否成功（有隐身道具才会开启）
+     */
+    toggleStealth() {
+        if (!this.inventory) return false;
+        // 关闭隐身
+        if (this._stealthActive) {
+            this._stealthActive = false;
+            return true;
+        }
+        // 开启隐身 → 消耗一个隐身道具
+        const idx = this.inventory.capsules.findIndex(c => c.id === 'capsule_stealth');
+        if (idx !== -1) {
+            this.inventory.capsules.splice(idx, 1);
+            this._stealthActive = true;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 隐身是否激活
+     */
+    isStealthActive() {
+        return this._stealthActive;
+    }
+
+    /**
+     * 投掷石头
+     * @param {number} gx - 目标网格 X
+     * @param {number} gy - 目标网格 Y
+     * @returns {boolean} 是否成功投掷
+     */
+    useStone(gx, gy) {
+        if (!this.inventory) return false;
+        const idx = this.inventory.capsules.findIndex(c => c.id === 'capsule_stone');
+        if (idx === -1) return false;
+        this.inventory.capsules.splice(idx, 1);
+        this._lastStoneTarget = { x: gx, y: gy };
+        this._lastStoneTime = performance.now();
+        return true;
+    }
+
+    /** 获取最近一次投石目标（供渲染层使用） */
+    getLastStoneTarget() {
+        const elapsed = performance.now() - (this._lastStoneTime || 0);
+        if (elapsed < 2000) return this._lastStoneTarget;
+        return null;
+    }
+
+    /**
+     * 放置肉陷阱
+     * @param {number} gx - 放置网格 X
+     * @param {number} gy - 放置网格 Y
+     * @returns {boolean} 是否成功放置
+     */
+    useMeat(gx, gy) {
+        if (!this.inventory) return false;
+        const idx = this.inventory.capsules.findIndex(c => c.id === 'capsule_meat');
+        if (idx === -1) return false;
+        this.inventory.capsules.splice(idx, 1);
+        this._meatPositions.push({ x: gx, y: gy });
+        return true;
+    }
+
+    /** 获取肉陷阱位置 */
+    getMeatPositions() {
+        return this._meatPositions;
+    }
+
+    /** 获取道具数量 */
+    getItemCount(itemId) {
+        if (!this.inventory) return 0;
+        return this.inventory.capsules.filter(c => c.id === itemId).length;
+    }
+
+    /** 获取背包中所有道具 */
+    getCapsules() {
+        return this.inventory?.capsules || [];
     }
 
     /**
