@@ -155,7 +155,7 @@ export class Renderer {
         const { grid, playerPixelX, playerPixelY, playerGX, playerGY,
                 playerDirection, playerIsMoving, seenCells, seenCellsTime,
                 boosterActive, fogEnabled, chestStates, fogOpts, monsters,
-                stealthActive, meatPositions, stoneTarget, bossPreviews } = state;
+                stealthActive, meatPositions, stoneTarget, bossPatrol } = state;
         const now = state.now || performance.now();
 
         const screenWidth = this.canvas.width / this.dpr;
@@ -310,34 +310,76 @@ export class Renderer {
 
         ctx.restore();
 
-        // ── 怪物感知范围 + 怪物本体（绝对屏幕坐标，与玩家同级） ──
+        // ── 怪物感知范围 + 怪物本体（绝对屏幕坐标） ──
         if (monsters && monsters.length > 0) {
             this._drawMonsters(monsters, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
         }
 
-        // ── Boss 预览（占位素材质检） ──
-        if (bossPreviews && bossPreviews.length > 0) {
-            this._drawBossPreviews(bossPreviews, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
-        }
-
-        // ── 绘制玩家 ──
+        // ── 准备玩家屏幕坐标 ──
         const playerScreenX = this.gridOffsetX + (playerPixelX / cellW - camIntX) * cellW - camFracX * cellW;
         const playerScreenY = this.gridOffsetY + (playerPixelY / cellH - camIntY) * cellH - camFracY * cellH;
         this.spriteRenderer.direction = playerDirection;
         this.spriteRenderer.isMoving = playerIsMoving;
-        // 隐身时半透明
-        if (stealthActive) {
-            ctx.save();
-            ctx.globalAlpha = 0.35;
-        }
-        this.spriteRenderer.draw(playerScreenX, playerScreenY, cellW);
-        if (stealthActive) {
-            ctx.restore();
+
+        // ── Y 轴深度排序：Boss 与玩家 ──
+        // 伪3D俯视角中 Y 更大的物体更靠近镜头（屏幕下方），应后绘制
+        const bossCloser = bossPatrol && bossPatrol.pixelY > playerPixelY;
+
+        // 隐身时玩家半透明
+        const drawPlayer = () => {
+            if (stealthActive) {
+                ctx.save();
+                ctx.globalAlpha = 0.35;
+            }
+            this.spriteRenderer.draw(playerScreenX, playerScreenY, cellW);
+            if (stealthActive) ctx.restore();
+        };
+
+        if (bossCloser) {
+            // Boss 更近 → 先画玩家（在后方），再画 Boss（在前方）
+            drawPlayer();
+            this._drawBossPatrol(bossPatrol, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
+        } else {
+            // 玩家更近（或没有 Boss）→ 先画 Boss（在后方），再画玩家（在前方）
+            if (bossPatrol) {
+                this._drawBossPatrol(bossPatrol, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
+            }
+            drawPlayer();
         }
 
         // ── 调试碰撞盒 ──
         if (typeof window !== 'undefined' && window.__showCollisionBox) {
+            // 玩家碰撞盒
             this._drawCollisionBox(playerPixelX, playerPixelY, cellW, cellH);
+
+            // 玩家 Sprite 边框 + 地面原点
+            this._drawSpriteBounds({ pixelX: playerPixelX, pixelY: playerPixelY }, cellW, cellH, camIntX, camIntY, camFracX, camFracY, 'player');
+
+            // Boss 碰撞盒
+            if (bossPatrol) {
+                this._drawBossCollisionBox(bossPatrol, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
+            }
+
+            // Boss Sprite 边框 + 地面原点
+            if (bossPatrol) {
+                this._drawSpriteBounds(bossPatrol, cellW, cellH, camIntX, camIntY, camFracX, camFracY, 'boss');
+            }
+
+            // 墙体/宝箱碰撞盒（需在网格坐标系中绘制）
+            ctx.save();
+            const gtx = Math.round(this.gridOffsetX - camFracX * cellW);
+            const gty = Math.round(this.gridOffsetY - camFracY * cellH);
+            ctx.translate(gtx, gty);
+            ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            for (const vc of visibleCells) {
+                if (isWallCell(vc.cell) || vc.cell === CELL.CHEST) {
+                    ctx.strokeRect(vc.cellX + 1, vc.cellY + 1, cellW - 2, cellH - 2);
+                }
+            }
+            ctx.setLineDash([]);
+            ctx.restore();
         }
 
         // ── 隐藏房间高亮（调试） ──
@@ -409,23 +451,20 @@ export class Renderer {
 
     _drawCollisionBox(px, py, cellW, cellH) {
         const ctx = this.ctx;
-        const footRatio = 0.5;
-        const cw = cellW * 0.4;
-        const ch = cellH * 0.3;
-        const hw = cw / 2;
-        const hh = ch / 2;
+        // 与 checkCollision 完全一致的碰撞盒尺寸
+        const halfW = cellW * 0.315; // 12.6px
+        const bottomH = cellH * 0.2; // 8px
 
-        // 网格坐标 → 屏幕坐标
+        // 像素坐标 → 屏幕坐标
         const vp = this.camera.getViewport();
         const sx = this.gridOffsetX + (px / cellW - vp.camIntX) * cellW - vp.camFracX * cellW;
         const sy = this.gridOffsetY + (py / cellH - vp.camIntY) * cellH - vp.camFracY * cellH;
 
-        const topFrac = 1 - footRatio * 2 + 0.3;
-        const bottomFrac = footRatio * 2 - 0.3;
-        const top = sy - hh * topFrac;
-        const bottom = sy + hh * bottomFrac;
-        const left = sx - hw;
-        const right = sx + hw;
+        // 碰撞盒：底部在 sy，向上延伸 bottomH
+        const left = sx - halfW;
+        const right = sx + halfW;
+        const top = sy - bottomH;
+        const bottom = sy;
 
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 255, 0, 0.7)';
@@ -434,7 +473,7 @@ export class Renderer {
         ctx.fillStyle = 'rgba(255, 255, 0, 0.1)';
         ctx.fillRect(left, top, right - left, bottom - top);
 
-        // 脚部中心点
+        // 脚部中心点（碰撞盒底部中点）
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.beginPath();
         ctx.arc(sx, sy, 2, 0, Math.PI * 2);
@@ -511,9 +550,23 @@ export class Renderer {
                 ctx.fillText('!', sx + cellW / 2, sy + cellH / 2);
             }
 
-            // ── 状态文字（调试用） ──
+            // ── 碰撞盒 + 状态文字（调试用） ──
             if (typeof window !== 'undefined' && window.__showCollisionBox) {
                 ctx.save();
+                // 碰撞区域圆
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)';
+                ctx.lineWidth = 1.5;
+                const mRadius = cellW * 0.35;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, mRadius, 0, Math.PI * 2);
+                ctx.stroke();
+                // 怪物格边界
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+                ctx.strokeRect(sx, sy, cellW, cellH);
+                ctx.setLineDash([]);
+                // 状态文字
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.font = '10px monospace';
                 ctx.textAlign = 'center';
@@ -524,47 +577,189 @@ export class Renderer {
     }
 
     /**
-     * 绘制 Boss 预览（用于素材质检）
-     * 在屏幕坐标中绘制，位置由网格坐标指定
+     * 绘制 Boss 碰撞盒（调试用）
+     * 严格按素材定义：锚点 (256,256) 相对左上角，碰撞盒以锚点为中心 x±96, y±24
      */
-    _drawBossPreviews(bossPreviews, cellW, cellH, camIntX, camIntY, camFracX, camFracY) {
+    /**
+     * 绘制 Sprite 边框和地面原点（调试用）
+     * entity 支持两种格式：
+     *   - 玩家：{ pixelX, pixelY }（无 frames）
+     *   - Boss：{ pixelX, pixelY, frames: { walk, idle, turnBack } }
+     */
+    _drawSpriteBounds(entity, cellW, cellH, camIntX, camIntY, camFracX, camFracY, type) {
         const ctx = this.ctx;
-        for (const bp of bossPreviews) {
-            const sx = Math.round(this.gridOffsetX + (bp.gx - camIntX) * cellW - camFracX * cellW);
-            const sy = Math.round(this.gridOffsetY + (bp.gy - camIntY) * cellH - camFracY * cellH);
+        const screenX = this.gridOffsetX + (entity.pixelX / cellW - camIntX) * cellW - camFracX * cellW;
+        const screenY = this.gridOffsetY + (entity.pixelY / cellH - camIntY) * cellH - camFracY * cellH;
 
-            const frame = bp.anim[Math.floor(bp.frameIdx) % bp.anim.length];
-            if (frame && frame.complete && frame.naturalWidth > 0) {
-                // 以玩家身高为基准（42px char × 1.2 playerScale = 50.4px），Boss ≈ 4× = 202px
-                const playerPixelH = 42 * (cellW / 40) * 1.2;
-                const targetH = Math.round(playerPixelH * 4);
-                const scale = targetH / frame.naturalHeight;
-                const dw = Math.round(frame.naturalWidth * scale);
-                const dh = targetH;
-                const dx = Math.round(sx + (cellW - dw) / 2);
-                const dy = Math.round(sy + cellH - dh);
-                ctx.shadowColor = 'rgba(255, 100, 0, 0.3)';
-                ctx.shadowBlur = 12;
-                ctx.drawImage(frame, dx, dy, dw, dh);
-                ctx.shadowBlur = 0;
-            } else {
-                // 加载失败时回退：橙色框
-                ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
-                ctx.fillRect(sx + 2, sy + 2, cellW - 4, cellH - 4);
-                ctx.fillStyle = '#ff8800';
-                ctx.font = `${Math.round(cellW * 0.3)}px monospace`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('?', sx + cellW / 2, sy + cellH / 2);
-            }
+        let bx, by, bw, bh; // sprite bounds
 
-            // 标签
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.font = '9px monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(bp.label, sx + cellW / 2, sy - 2);
+        if (type === 'player') {
+            const bbox = this.spriteRenderer.getCurrentBBox(screenX, screenY, cellW);
+            bx = bbox.x; by = bbox.y; bw = bbox.w; bh = bbox.h;
+        } else {
+            // Boss: 从 entity.frames 取第一帧计算尺寸
+            const frames = entity.frames;
+            if (!frames || !frames.walk || !frames.walk.length) return;
+            const frame = frames.walk[0];
+            const playerPixelH = 42 * (cellW / 40) * 1.2;
+            const targetH = Math.round(playerPixelH * 4);
+            const sc = targetH / frame.naturalHeight;
+            const dw = Math.round(frame.naturalWidth * sc);
+            const dh = targetH;
+            bx = Math.round(screenX - dw / 2);
+            // Boss 锚点 (256,256) 对齐 screenY → 图片顶部 by = screenY - 256*sc
+            by = Math.round(screenY - 256 * sc);
+            bw = dw;
+            bh = dh;
         }
+
+        // Sprite 边框（淡青色虚线）
+        ctx.save();
+        ctx.strokeStyle = type === 'player' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 200, 255, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(bx, by, bw, bh);
+        ctx.setLineDash([]);
+
+        // 地面原点（大圆点）
+        ctx.fillStyle = type === 'player' ? '#00ff88' : '#ff8800';
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 从地面原点向 Sprite 顶部画一条垂直线（标记 "脚底→头顶" 距离）
+        ctx.strokeStyle = type === 'player' ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 136, 0, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(screenX, screenY);
+        ctx.lineTo(screenX, by);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 标签
+        ctx.fillStyle = type === 'player' ? '#00ff88' : '#ff8800';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(type === 'player' ? 'PLAYER·原点' : 'BOSS·原点', screenX + 8, screenY - 2);
+        ctx.restore();
+    }
+
+    _drawBossCollisionBox(boss, cellW, cellH, camIntX, camIntY, camFracX, camFracY) {
+        const ctx = this.ctx;
+
+        // Boss 屏幕坐标（图片底部中心）
+        const sx = Math.round(this.gridOffsetX + (boss.pixelX / cellW - camIntX) * cellW - camFracX * cellW);
+        const sy = Math.round(this.gridOffsetY + (boss.pixelY / cellH - camIntY) * cellH - camFracY * cellH);
+
+        // 使用 boss 存储的原始素材碰撞数据 + 缩放系数
+        const sc = boss.collisionScale;
+        const c = boss.collision;
+
+        // 锚点屏幕坐标：sy 直接对应素材锚点 (256,256)
+        const anchorX = sx;
+        const anchorY = sy;
+
+        // 碰撞盒以锚点为中心（缩放后尺寸）
+        const halfW = c.halfW * sc;
+        const halfH = c.halfH * sc;
+        const left = anchorX - halfW;
+        const top = anchorY - halfH;
+        const w = halfW * 2;
+        const h = halfH * 2;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 0, 255, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(left, top, w, h);
+        // 锚点标记
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
+        ctx.beginPath();
+        ctx.arc(anchorX, anchorY, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // 标注文字
+        ctx.fillStyle = 'rgba(255, 0, 255, 0.7)';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOSS', left + w / 2, top - 4);
+        ctx.restore();
+    }
+
+    /**
+     * 绘制 Boss 巡逻（使用新版 512×320 素材）
+     * 用像素坐标绘制（与玩家一致），支持 3 种动画状态 + 水平翻转
+     */
+    _drawBossPatrol(boss, cellW, cellH, camIntX, camIntY, camFracX, camFracY) {
+        const ctx = this.ctx;
+        const frames = boss.frames;
+
+        // 选取当前帧
+        let frame;
+        let flip = false;
+
+        if (boss.state === 'walking') {
+            frame = frames.walk[Math.min(boss.frameIdx, frames.walk.length - 1)];
+            flip = !boss.facingRight;
+        } else if (boss.state === 'idle') {
+            frame = frames.idle[Math.min(boss.frameIdx, frames.idle.length - 1)];
+            flip = !boss.facingRight;
+        } else { // turning
+            // turnBack 动画：右→左播放正向，左→右播放反向
+            const total = frames.turnBack.length;
+            const normIdx = Math.min(boss.frameIdx, total - 1);
+            const turnIdx = boss.facingRight ? normIdx : (total - 1 - normIdx);
+            frame = frames.turnBack[turnIdx];
+            flip = false; // 动画本身已处理方向
+        }
+
+        if (!frame || !frame.complete || frame.naturalWidth === 0) {
+            // 加载失败回退：橙色问号
+            const sx = Math.round(this.gridOffsetX + (boss.gx - camIntX) * cellW - camFracX * cellW);
+            const sy = Math.round(this.gridOffsetY + (boss.gy - camIntY) * cellH - camFracY * cellH);
+            ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+            ctx.fillRect(sx + 2, sy + 2, cellW - 4, cellH - 4);
+            ctx.fillStyle = '#ff8800';
+            ctx.font = `${Math.round(cellW * 0.3)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('?', sx + cellW / 2, sy + cellH / 2);
+            return;
+        }
+
+        // 屏幕坐标（与玩家像素坐标一致）
+        const screenX = this.gridOffsetX + (boss.pixelX / cellW - camIntX) * cellW - camFracX * cellW;
+        const screenY = this.gridOffsetY + (boss.pixelY / cellH - camIntY) * cellH - camFracY * cellH;
+
+        // 缩放：以玩家身高为基准（42 × 1.2 = 50.4px），Boss ≈ 4×
+        const playerPixelH = 42 * (cellW / 40) * 1.2;
+        const targetH = Math.round(playerPixelH * 4);
+        const scale = targetH / frame.naturalHeight; // 512×320 → ~202px
+        const dw = Math.round(frame.naturalWidth * scale);
+        const dh = targetH;
+
+        const dx = Math.round(screenX - dw / 2);
+        // 锚点 (256,256) 对齐 screenY → 图片顶部 dy = screenY - 256*scale
+        const dy = Math.round(screenY - 256 * scale);
+
+        // 辉光效果
+        ctx.save();
+        ctx.shadowColor = 'rgba(255, 100, 0, 0.3)';
+        ctx.shadowBlur = 12;
+
+        if (flip) {
+            ctx.save();
+            ctx.translate(dx + dw, dy);
+            ctx.scale(-1, 1);
+            ctx.drawImage(frame, 0, 0, dw, dh);
+            ctx.restore();
+        } else {
+            ctx.drawImage(frame, dx, dy, dw, dh);
+        }
+
+        ctx.restore();
     }
 
     /**

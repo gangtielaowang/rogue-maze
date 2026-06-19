@@ -181,6 +181,27 @@ export class SpriteRenderer {
         this.ctx.shadowBlur = 0;
     }
 
+    /**
+     * 获取当前帧精灵的包围盒信息（供调试可视化用）
+     * @returns {{ x, y, w, h, originX, originY }}
+     */
+    getCurrentBBox(screenX, screenY, cellSize) {
+        const scale = (cellSize / 40) * this.playerScale;
+        const widthSet = this.quietMode ? this._widths.walk : this._widths.run;
+        const baseWidth = this.isMoving ? (widthSet[this.direction] || 21) : widthSet.standby;
+        const charWidth = Math.round(baseWidth * scale);
+        const charHeight = Math.round(this.characterHeight * scale);
+        const pivotOffset = Math.round(this.characterPivotY * scale);
+        return {
+            x: Math.round(screenX - charWidth / 2),
+            y: Math.round(screenY - pivotOffset),
+            w: charWidth,
+            h: charHeight,
+            originX: screenX,
+            originY: screenY,
+        };
+    }
+
     /** 回退绘制：橙色圆形 */
     _drawFallback(x, y, cellSize) {
         this.ctx.fillStyle = COLORS.player;

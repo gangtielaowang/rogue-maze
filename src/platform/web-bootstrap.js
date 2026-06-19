@@ -116,34 +116,17 @@ function waitImages(images) {
 }
 
 /**
- * 加载 Boss 预览帧
+ * 加载 Boss 巡逻帧（新版 512×320 素材）
  */
 function loadBossFrames() {
     const basePath = 'assets/spirits/monster-bigBoss_frames/';
-    const createImage = () => platform.createImage();
-    const pad = (n) => String(n).padStart(3, '0');
-
-    const anims = {
-        idleRoar: [],
-        idleTalk: [],
-        idleFire: [],
-        idleStand: [],
-    };
-
-    for (let i = 1; i <= 20; i++) {
-        const img = createImage(); img.src = basePath + `bigBoss_idleRoar_${pad(i)}.png`; anims.idleRoar.push(img);
-    }
-    for (let i = 1; i <= 17; i++) {
-        const img = createImage(); img.src = basePath + `bigBoss_idleTalk_${pad(i)}.png`; anims.idleTalk.push(img);
-    }
-    for (let i = 1; i <= 12; i++) {
-        const img = createImage(); img.src = basePath + `bigBoss_idleFire_${pad(i)}.png`; anims.idleFire.push(img);
-    }
-    for (let i = 1; i <= 16; i++) {
-        const img = createImage(); img.src = basePath + `bigBoss_idleStand_${pad(i)}.png`; anims.idleStand.push(img);
-    }
-
-    return anims;
+    const ci = () => platform.createImage();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const frames = { idle: [], walk: [], turnBack: [] };
+    for (let i = 0; i <= 22; i++) { const img = ci(); img.src = basePath + `monster-bigBoss_idle_${p2(i)}.png`; frames.idle.push(img); }
+    for (let i = 0; i <= 23; i++) { const img = ci(); img.src = basePath + `monster-bigBoss_walk_${p2(i)}.png`; frames.walk.push(img); }
+    for (let i = 0; i <= 33; i++) { const img = ci(); img.src = basePath + `monster-bigBoss_turnBack_${p2(i)}.png`; frames.turnBack.push(img); }
+    return frames;
 }
 
 // ─────── Canvas 创建 ───────
@@ -520,10 +503,9 @@ export async function startGame(container) {
         ...tiles.monsters,
     ];
     const bossImages = [
-        ...bossAnims.idleRoar,
-        ...bossAnims.idleTalk,
-        ...bossAnims.idleFire,
-        ...bossAnims.idleStand,
+        ...bossAnims.idle,
+        ...bossAnims.walk,
+        ...bossAnims.turnBack,
     ];
     await waitImages([tileImages, fogFrames, bossImages]);
 
@@ -547,6 +529,9 @@ export async function startGame(container) {
     const screenWidth = VIEW_COLS * CELL_SIZE;   // 400
     const screenHeight = VIEW_ROWS * CELL_SIZE;  // 480
 
+    // ── 像素级墙体碰撞数据（替代 grid 隐式格子碰撞） ──
+    let wallRects = buildWallRects(grid, totalCols, totalRows);
+
     // ── 初始化渲染器 ──
     const renderer = new Renderer(canvas, { tiles, fogFrames, monsters: tiles.monsters }, {
         cellWidth: CELL_SIZE,
@@ -567,7 +552,7 @@ export async function startGame(container) {
     // ── 初始化调试面板 ──
     createDebugPanel({ fogRenderer: renderer.fogRenderer, audioPlayer });
 
-    // ── Boss 预览：在最大房间中心摆放 1 个，用调试按钮切换动作 ──
+    // ── Boss 巡逻：在最大房间中创建巡逻 AI ──
     const bossRooms = bridge.game.rooms;
     let largestRoom = null;
     let maxArea = 0;
@@ -576,23 +561,44 @@ export async function startGame(container) {
         const area = (ib.right - ib.left + 1) * (ib.bottom - ib.top + 1);
         if (area > maxArea) { maxArea = area; largestRoom = room; }
     }
-    const bossPreviews = [];
+    let bossPatrol = null;
     if (largestRoom) {
         const ib = largestRoom.interior;
         const cx = Math.floor((ib.left + ib.right) / 2);
         const cy = Math.floor((ib.top + ib.bottom) / 2);
         window.__bossRoomPos = { gx: cx, gy: cy }; // 供调试瞬移用
-        const animKeys = ['idleRoar', 'idleTalk', 'idleFire', 'idleStand'];
-        const animNames = ['嚎叫', '讲话', '喷火', '待机'];
-        window.__bossAnimKeys = animKeys;
-        window.__bossAnimNames = animNames;
-        window.__bossAnimSet = 3; // 默认显示"待机-无动作"
-        bossPreviews.push(
-            { gx: cx, gy: cy, anim: bossAnims[animKeys[3]], frameIdx: 0, timer: 0, fps: 6, label: 'Boss' },
-        );
-        window.__updateBossAnims = () => {
-            const key = animKeys[window.__bossAnimSet];
-            if (bossPreviews.length > 0) bossPreviews[0].anim = bossAnims[key];
+
+        // 与渲染器 _drawBossPatrol 一致的缩放系数
+        const bossPlayerPH = 42 * (CELL_SIZE / 40) * 1.2;
+        const bossTargetH = Math.round(bossPlayerPH * 4);
+        const bossScale = bossTargetH / 320;
+
+        bossPatrol = {
+            gx: cx, gy: cy,
+            pixelX: cx * CELL_SIZE + CELL_SIZE / 2,
+            pixelY: cy * CELL_SIZE + CELL_SIZE / 2,
+            facingRight: true,
+            state: 'walking',   // 'walking' | 'turning'
+            stateTimer: 0,
+            animTimer: 0,
+            frameIdx: 0,
+            animFps: { idle: 6, walk: 15, turnBack: 10 },
+            frames: bossAnims,
+            leftBound: ib.left,
+            rightBound: ib.right,
+            topBound: ib.top,
+            bottomBound: ib.bottom,
+            // 碰撞盒使用原始素材空间定义 + 缩放系数，
+            // 实际使用时动态计算 collision.* × collisionScale
+            collision: {
+                anchorX: 256,  // 锚点相对素材左上角 X
+                anchorY: 256,  // 锚点相对素材左上角 Y
+                halfW: 96,     // 碰撞盒半宽（原始素材像素）
+                halfH: 24,     // 碰撞盒半高（原始素材像素）
+                imgW: 512,     // 素材原始宽度
+                imgH: 320,     // 素材原始高度
+            },
+            collisionScale: bossScale, // 缩放系数（targetH / 320）
         };
     }
 
@@ -743,44 +749,77 @@ export async function startGame(container) {
     }
 
     /**
-     * 碰撞检测
+     * 构建像素空间墙体矩形列表
+     * 将 grid 二维数组转换为 {x, y, w, h, type} 矩形数组，
+     * 用于纯像素级碰撞检测，不再隐式依赖格子坐标。
+     */
+    function buildWallRects(grid, totalCols, totalRows) {
+        const rects = [];
+        for (let gy = 0; gy < totalRows; gy++) {
+            for (let gx = 0; gx < totalCols; gx++) {
+                const cell = grid[gy][gx];
+                if (cell !== 0 && cell !== 11 && cell !== 12 && cell !== 13) {
+                    if (cell === 2) {
+                        // 宝箱作为 type='chest' 加入，运行时由 __chestPassable 控制
+                        rects.push({ x: gx * CELL_SIZE, y: gy * CELL_SIZE, w: CELL_SIZE, h: CELL_SIZE, type: 'chest' });
+                    }
+                    continue;
+                }
+                const x = gx * CELL_SIZE;
+                const y = gy * CELL_SIZE;
+                // 上边缘墙体：仅底部 20% 区域可碰撞
+                if (gy > 0 && !isWallCell(grid[gy - 1][gx]) &&
+                    gy + 1 < totalRows && isWallCell(grid[gy + 1][gx])) {
+                    const wallTop = CELL_SIZE * 0.8;
+                    rects.push({ x, y: y + wallTop, w: CELL_SIZE, h: CELL_SIZE - wallTop, type: 'wall' });
+                } else {
+                    rects.push({ x, y, w: CELL_SIZE, h: CELL_SIZE, type: 'wall' });
+                }
+            }
+        }
+        return rects;
+    }
+
+    /**
+     * 碰撞检测（纯像素级）
      *
      * 伪3D设计下，玩家 sprite 可视作从地面站立起来的角色，
      * 因此碰撞盒只需检测 sprite 底部中心窄带（约占 sprite 高度 20%）。
-     * 同时检测与怪物的碰撞。
+     * 所有碰撞数据均为像素空间，不再依赖格子坐标。
      */
-    function checkCollision(targetX, targetY, grid, totalCols, totalRows, monsters) {
+    function checkCollision(targetX, targetY, wallRects, monsters, boss) {
         const halfW = CELL_SIZE * 0.315; // 12.6px
         const bottomH = CELL_SIZE * 0.2;
+        const mapW = totalCols * CELL_SIZE;
+        const mapH = totalRows * CELL_SIZE;
         const corners = [
             { x: targetX - halfW, y: targetY - bottomH },
             { x: targetX + halfW, y: targetY - bottomH },
             { x: targetX - halfW, y: targetY },
             { x: targetX + halfW, y: targetY },
         ];
+
+        // 地图边界碰撞（出界即碰撞）
         for (const c of corners) {
-            const gx = Math.floor(c.x / CELL_SIZE);
-            const gy = Math.floor(c.y / CELL_SIZE);
-            if (gx < 0 || gx >= totalCols || gy < 0 || gy >= totalRows) return false;
-            if (!isWallCell(grid[gy][gx])) continue;
-
-            // 上边缘墙体（tile_0004/05/26）：仅底部 20% 区域碰撞
-            if (gy > 0 && !isWallCell(grid[gy - 1][gx]) &&
-                gy + 1 < totalRows && isWallCell(grid[gy + 1][gx])) {
-                const cellBottom = (gy + 1) * CELL_SIZE;
-                const wallTop = cellBottom - CELL_SIZE * 0.2;
-                if (c.y < wallTop) continue;
-            }
-
-            return false;
+            if (c.x < 0 || c.x >= mapW || c.y < 0 || c.y >= mapH) return false;
         }
 
-        // 怪物碰撞检测
+        // 墙体矩形碰撞（遍历 wallRects，纯 AABB 四角检测）
+        for (const c of corners) {
+            for (const r of wallRects) {
+                if (r.type === 'chest' && window.__chestPassable) continue;
+                if (c.x >= r.x && c.x < r.x + r.w && c.y >= r.y && c.y < r.y + r.h) {
+                    return false;
+                }
+            }
+        }
+
+        // 怪物碰撞检测（像素级圆形）
         if (monsters && monsters.length > 0) {
             for (const m of monsters) {
-                // 怪物占据区域：以其所在格子中心为圆心，半径 0.35 格
-                const mCenterX = (m.pixelX + 0.5) * CELL_SIZE;
-                const mCenterY = (m.pixelY + 0.5) * CELL_SIZE;
+                // 怪物位置：连续格坐标 → 像素中心
+                const mCenterX = m.pixelX * CELL_SIZE + CELL_SIZE / 2;
+                const mCenterY = m.pixelY * CELL_SIZE + CELL_SIZE / 2;
                 const mRadius = CELL_SIZE * 0.35;
                 for (const c of corners) {
                     const dx = c.x - mCenterX;
@@ -792,7 +831,38 @@ export async function startGame(container) {
             }
         }
 
+        // Boss 碰撞检测（使用原始素材空间数据 × 缩放系数，纯 AABB）
+        if (boss) {
+            const playerLeft = targetX - halfW;
+            const playerRight = targetX + halfW;
+            const playerTop = targetY - bottomH;
+            const playerBottom = targetY;
+            const sc = boss.collisionScale;
+            const c = boss.collision;
+            // 锚点屏幕 Y = boss.pixelY（pixelY 直接代表锚点）
+            const anchorY = boss.pixelY;
+            const halfWScaled = c.halfW * sc;
+            const halfHScaled = c.halfH * sc;
+            const bossLeft = boss.pixelX - halfWScaled;
+            const bossRight = boss.pixelX + halfWScaled;
+            const bossTop = anchorY - halfHScaled;
+            const bossBottom = anchorY + halfHScaled;
+            if (playerLeft < bossRight && playerRight > bossLeft &&
+                playerTop < bossBottom && playerBottom > bossTop) {
+                return false;
+            }
+        }
+
         return true;
+    }
+
+    // ── 过滤 Boss 房间内的小怪物 ──
+    function getMonstersExcludeBossRoom(rawMonsters) {
+        if (!bossPatrol || !rawMonsters) return rawMonsters || [];
+        return rawMonsters.filter(m =>
+            m.gridX < bossPatrol.leftBound || m.gridX > bossPatrol.rightBound ||
+            m.gridY < bossPatrol.topBound || m.gridY > bossPatrol.bottomBound
+        );
     }
 
     // ── 当前帧玩家格子（用于检测跨格事件） ──
@@ -802,6 +872,86 @@ export async function startGame(container) {
     // ── 脚步声距离累计 ──
     let footstepDistance = 0;
     const FOOTSTEP_THRESHOLD = CELL_SIZE * 0.55; // 每走约半格触发一次
+
+    /**
+     * 更新 Boss 巡逻状态机（纯像素级平滑移动）
+     * 使用碰撞盒前缘做像素级碰撞检测（wallRects AABB）
+     * 碰撞墙/玩家后直接转身，跳过 idle
+     */
+    function updateBossPatrol(boss, dt, wallRects, playerPixelX, playerPixelY) {
+        boss.animTimer += dt;
+
+        // ── 像素级平滑行走 ──
+        if (boss.state === 'walking') {
+            const walkSpeed = 1.5; // 格/秒
+            const dir = boss.facingRight ? 1 : -1;
+            const stepPx = walkSpeed * CELL_SIZE * dt;
+
+            const newPixelX = boss.pixelX + dir * stepPx;
+            const sc = boss.collisionScale;
+            const c = boss.collision;
+
+            // 碰撞盒缩放后尺寸
+            const halfWScaled = c.halfW * sc;
+            const halfHScaled = c.halfH * sc;
+            const anchorY = boss.pixelY; // pixelY 直接代表锚点
+
+            // 前缘：碰撞盒行进方向一侧的整个垂直边
+            const leadingX = boss.facingRight
+                ? newPixelX + halfWScaled   // 向右：碰撞盒右边缘
+                : newPixelX - halfWScaled;  // 向左：碰撞盒左边缘
+            const leadingTop = anchorY - halfHScaled;
+            const leadingBottom = anchorY + halfHScaled;
+
+            // 像素级墙体碰撞：前缘线段与 wallRects 的 AABB 检测
+            const hitWall = wallRects.some(r => {
+                if (r.type === 'chest' && window.__chestPassable) return false;
+                return leadingX >= r.x && leadingX < r.x + r.w &&
+                       leadingBottom > r.y && leadingTop < r.y + r.h;
+            });
+
+            // 像素级玩家碰撞：AABB 矩形重叠
+            const playerHalfW = CELL_SIZE * 0.315;
+            const playerBottomH = CELL_SIZE * 0.2;
+            const hitPlayer =
+                playerPixelX - playerHalfW < boss.pixelX + halfWScaled &&
+                playerPixelX + playerHalfW > boss.pixelX - halfWScaled &&
+                playerPixelY - playerBottomH < anchorY + halfHScaled &&
+                playerPixelY > anchorY - halfHScaled;
+
+            // 边界检测：Boss 中心不越出房间范围
+            const hitBound = newPixelX < boss.leftBound * CELL_SIZE ||
+                            newPixelX > (boss.rightBound + 1) * CELL_SIZE;
+
+            if (hitWall || hitBound || hitPlayer) {
+                // 碰到任何阻挡 → 保持当前像素位置，直接转身
+                boss.state = 'turning';
+                boss.animTimer = 0;
+                boss.frameIdx = 0;
+            } else {
+                // 正常移动（纯像素，不绑定格子）
+                boss.gx = Math.floor(newPixelX / CELL_SIZE);
+                boss.pixelX = newPixelX;
+            }
+
+            // Walk 动画（24 帧循环）
+            const fps = boss.animFps.walk;
+            boss.frameIdx = Math.floor(boss.animTimer / (1 / fps)) % boss.frames.walk.length;
+
+        // ── 转身（保持在碰撞时的像素位置，不绑定格子） ──
+        } else if (boss.state === 'turning') {
+            const fps = boss.animFps.turnBack;
+            boss.frameIdx = Math.floor(boss.animTimer / (1 / fps));
+            const total = boss.frames.turnBack.length;
+
+            if (boss.frameIdx >= total) {
+                boss.facingRight = !boss.facingRight;
+                boss.state = 'walking';
+                boss.animTimer = 0;
+                boss.frameIdx = 0;
+            }
+        }
+    }
 
     // ── 游戏循环 ──
     let prevTimestamp = 0;
@@ -929,11 +1079,11 @@ export async function startGame(container) {
                 const ndy = ddy / mag;
                 let targetPX = playerPixelX;
                 let targetPY = playerPixelY;
-                const monsterStates = bridge.getMonsters();
+                const monsterStates = getMonstersExcludeBossRoom(bridge.getMonsters());
                 for (let step = 0; step < DASH_RANGE; step++) {
                     const nextPX = targetPX + ndx * CELL_SIZE;
                     const nextPY = targetPY + ndy * CELL_SIZE;
-                    if (checkCollision(nextPX, nextPY, grid, totalCols, totalRows, monsterStates)) {
+                    if (checkCollision(nextPX, nextPY, wallRects, monsterStates, bossPatrol)) {
                         targetPX = nextPX;
                         targetPY = nextPY;
                     } else {
@@ -1006,15 +1156,15 @@ export async function startGame(container) {
             const speedPx = moveSpeed * CELL_SIZE;
             const targetX = playerPixelX + dx * speedPx * dt;
             const targetY = playerPixelY + dy * speedPx * dt;
-            const monsterStates = bridge.getMonsters();
+            const monsterStates = getMonstersExcludeBossRoom(bridge.getMonsters());
 
-            if (checkCollision(targetX, targetY, grid, totalCols, totalRows, monsterStates)) {
+            if (checkCollision(targetX, targetY, wallRects, monsterStates, bossPatrol)) {
                 playerPixelX = targetX;
                 playerPixelY = targetY;
             } else {
-                if (dx !== 0 && checkCollision(targetX, playerPixelY, grid, totalCols, totalRows, monsterStates)) {
+                if (dx !== 0 && checkCollision(targetX, playerPixelY, wallRects, monsterStates, bossPatrol)) {
                     playerPixelX = targetX;
-                } else if (dy !== 0 && checkCollision(playerPixelX, targetY, grid, totalCols, totalRows, monsterStates)) {
+                } else if (dy !== 0 && checkCollision(playerPixelX, targetY, wallRects, monsterStates, bossPatrol)) {
                     playerPixelY = targetY;
                 }
             }
@@ -1085,11 +1235,9 @@ export async function startGame(container) {
         const stealthActive = bridge.isStealthActive();
         bridge.updateMonsters(dt * 1000, noiseSource, stealthActive, noiseLevel);
 
-        // ── Boss 预览动画更新 ──
-        for (const bp of bossPreviews) {
-            bp.timer += dt * 1000;
-            const frameTime = 1000 / bp.fps;
-            bp.frameIdx = Math.floor(bp.timer / frameTime) % bp.anim.length;
+        // ── Boss 巡逻更新 ──
+        if (bossPatrol) {
+            updateBossPatrol(bossPatrol, dt, wallRects, playerPixelX, playerPixelY);
         }
 
         // ── 更新渲染器 ──
@@ -1112,11 +1260,11 @@ export async function startGame(container) {
             chestStates: bridge.chestStates,
             targetMarker: autoTarget,
             fogOpts: window.__fogOpts || undefined,
-            monsters: bridge.getMonsters(),
+            monsters: getMonstersExcludeBossRoom(bridge.getMonsters()),
             stealthActive: bridge.isStealthActive(),
             meatPositions: bridge.getMeatPositions(),
             stoneTarget: bridge.getLastStoneTarget(),
-            bossPreviews,
+            bossPatrol,
             now: performance.now(),
         });
 

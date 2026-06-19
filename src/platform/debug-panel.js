@@ -502,13 +502,6 @@ function createPanelDOM() {
                     <label>Boss 房间</label>
                     <button class="dbg-toggle" id="dbg-tp-boss">瞬移</button>
                 </div>
-                <div class="dbg-row" id="dbg-boss-anim-row">
-                    <label>Boss 动作</label>
-                    <button class="dbg-toggle on" data-boss-anim="0">嚎叫</button>
-                    <button class="dbg-toggle" data-boss-anim="1">讲话</button>
-                    <button class="dbg-toggle" data-boss-anim="2">喷火</button>
-                    <button class="dbg-toggle on" data-boss-anim="3">待机</button>
-                </div>
             </div>
 
             <!-- 迷雾参数 -->
@@ -753,24 +746,6 @@ function bindEvents(panel, bgmPanel, toggleBtn, audioPlayer, fogRenderer, bgmSta
                 panel.classList.remove('active');
                 toggleBtn.classList.remove('active');
             }
-        });
-    }
-
-    // ── Boss 动作切换 ──
-    const animRow = document.getElementById('dbg-boss-anim-row');
-    if (animRow) {
-        animRow.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-boss-anim]');
-            if (!btn) return;
-            const idx = parseInt(btn.dataset.bossAnim);
-            window.__bossAnimSet = idx;
-            if (typeof window.__updateBossAnims === 'function') {
-                window.__updateBossAnims();
-            }
-            // 更新按钮高亮
-            animRow.querySelectorAll('[data-boss-anim]').forEach(b => {
-                b.classList.toggle('on', parseInt(b.dataset.bossAnim) === idx);
-            });
         });
     }
 
