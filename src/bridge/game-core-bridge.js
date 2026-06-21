@@ -288,6 +288,13 @@ export class GameCoreBridge {
         return this.game?.monsterManager?.getMonsterStates() || [];
     }
 
+    /**
+     * 设置怪物攻击冷却（击中玩家后触发）
+     */
+    setMonsterHitCooldown(monsterId, cooldownMs) {
+        this.game?.monsterManager?.setMonsterHitCooldown(monsterId, cooldownMs);
+    }
+
     // ─────── 玩家应对手段 ───────
 
     /** 肉陷阱位置列表 */

@@ -19,15 +19,17 @@ export const DIR = { UP: 0, RIGHT: 1, DOWN: 2, LEFT: 3 };
 /** 怪物状态机 */
 export const MONSTER_STATE = {
     PATROL: 'patrol',               // 巡逻中，放松状态
+    ALERTED: 'alerted',             // 刚发现玩家，弹跳动画中（0.3s）
     INVESTIGATE: 'investigate',     // 听到声音，前往调查
-    TRACK: 'track',                 // 警觉，快速追踪玩家
-    ATTACK: 'attack',               // 察觉，直接攻击！(当前仅标识，攻击表现待实现)
+    RETURNING: 'returning',         // 调查完毕，返回巡逻路径
+    TRACK: 'track',                 // 警觉，快速追踪玩家（暂未启用）
+    ATTACK: 'attack',               // 察觉，直接攻击！（暂未启用）
     STUNNED: 'stunned',             // 被美食吸引，暂时停留
 };
 
 /** 默认感知范围配置（各怪物类型可覆写） */
 const DEFAULT_PERCEPTION = {
-    hearing: { angle: 120, range: 7 },   // 听觉
+    hearing: { angle: 120, range: 5 },   // 听觉
     alert:   { angle: 120, range: 4 },   // 警觉
     detect:  { angle: 90,  range: 2 },   // 察觉
 };
@@ -133,6 +135,16 @@ export class Monster {
         this._stateTimer = 0;            // 当前状态已持续 ms
         this._investigateTarget = null;  // { x, y } 调查目标点
 
+        // 听觉累计计时器（新机制：玩家在听觉范围内累计 ≥1s 触发 ALERTED）
+        this._hearingTimer = 0;          // 累计听觉时间 (ms)，离开时衰减
+        this._alertCooldown = 0;         // 警觉冷却 (ms)，到达标记格后进入冷却
+        this._alertTarget = null;        // 弹跳时标记的玩家格子 { x, y }
+        this._returnTarget = null;       // RETURNING 状态的目标巡逻路径点
+        this._investigateSpeedMul = 1.5; // 调查状态移动速度倍率
+        this._hitCooldown = 0;           // 攻击冷却 (ms)，命中玩家后计时
+        this._playerGX = 0;
+        this._playerGY = 0;
+
         // 特殊标记（已废弃 — 所有怪物均不可穿墙）
         this.ghostPassWall = false;
 
@@ -159,6 +171,8 @@ export class Monster {
      */
     update(dt, playerGX, playerGY, noiseSource, stealthActive = false, noiseLevel = 1, meatPositions) {
         this._stateTimer += dt;
+        this._playerGX = playerGX;
+        this._playerGY = playerGY;
 
         // 0. 连续像素位置更新（每帧向目标移动）
         this._updatePosition(dt);
@@ -191,6 +205,25 @@ export class Monster {
         // 1. 感知检测
         this._detectPlayer(playerGX, playerGY, noiseSource, stealthActive, noiseLevel);
 
+        // 1.5 听觉累计计时器（仅 PATROL/INVESTIGATE/RETURNING 状态累计）
+        if ((this.state === MONSTER_STATE.PATROL ||
+             this.state === MONSTER_STATE.INVESTIGATE ||
+             this.state === MONSTER_STATE.RETURNING) &&
+            this.lastDetection.hearing) {
+            this._hearingTimer += dt;
+        } else {
+            // 离开听觉范围 → 衰减（衰减速度是累加速度的 1/3）
+            this._hearingTimer = Math.max(0, this._hearingTimer - dt * 0.3);
+        }
+        // 警觉冷却递减
+        if (this._alertCooldown > 0) {
+            this._alertCooldown = Math.max(0, this._alertCooldown - dt);
+        }
+        // 攻击冷却递减
+        if (this._hitCooldown > 0) {
+            this._hitCooldown = Math.max(0, this._hitCooldown - dt);
+        }
+
         // 2. 状态转移
         this._updateState(dt, playerGX, playerGY);
 
@@ -205,6 +238,10 @@ export class Monster {
         this.state = MONSTER_STATE.PATROL;
         this._stateTimer = 0;
         this._investigateTarget = null;
+        this._hearingTimer = 0;
+        this._alertCooldown = 0;
+        this._alertTarget = null;
+        this._returnTarget = null;
     }
 
     // ─────── 感知 ───────
@@ -216,9 +253,13 @@ export class Monster {
         // 计算与玩家的距离和扇形检测
         let inDetect = isInSector(this.gridX, this.gridY, this.facing, px, py, this.detectAngle, this.detectRange);
         let inAlert  = isInSector(this.gridX, this.gridY, this.facing, px, py, this.alertAngle, this.alertRange);
-        // 听觉范围受玩家噪音倍率影响
+        // 听觉范围受玩家噪音倍率影响，且受墙体遮挡
         const effectiveHearingRange = this.hearingRange * noiseLevel;
-        const inHearing = isInSector(this.gridX, this.gridY, this.facing, px, py, this.hearingAngle, effectiveHearingRange);
+        let inHearing = isInSector(this.gridX, this.gridY, this.facing, px, py, this.hearingAngle, effectiveHearingRange);
+        // 墙体遮挡听觉：中间有墙则听不到
+        if (inHearing) {
+            inHearing = this._hasLineOfSight(this.gridX, this.gridY, px, py);
+        }
 
         // 隐身处检查：屏蔽视觉检测（警觉+察觉），但听觉仍有效
         if (stealthActive) {
@@ -238,16 +279,55 @@ export class Monster {
                 (noiseSource.x - this.gridX) ** 2 + (noiseSource.y - this.gridY) ** 2
             );
             if (noiseDist <= this.hearingRange) {
-                // 听到声音 → 前往调查
-                if (this.state === MONSTER_STATE.PATROL) {
-                    this.state = MONSTER_STATE.INVESTIGATE;
-                    this._investigateTarget = { x: noiseSource.x, y: noiseSource.y };
-                    this._stateTimer = 0;
+                // 噪音源也受墙体遮挡
+                if (this._hasLineOfSight(this.gridX, this.gridY, noiseSource.x, noiseSource.y)) {
+                    if (this.state === MONSTER_STATE.PATROL) {
+                        this.state = MONSTER_STATE.INVESTIGATE;
+                        this._investigateTarget = { x: noiseSource.x, y: noiseSource.y };
+                        this._stateTimer = 0;
+                    }
                 }
             }
         }
 
         return this.lastDetection;
+    }
+
+    /**
+     * 检测两点之间是否有墙体遮挡（Bresenham 线步进）
+     * @param {number} x0 - 起点格 X
+     * @param {number} y0 - 起点格 Y
+     * @param {number} x1 - 终点格 X
+     * @param {number} y1 - 终点格 Y
+     * @returns {boolean} true=无遮挡
+     */
+    _hasLineOfSight(x0, y0, x1, y1) {
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
+        let err = dx - dy;
+        let x = x0, y = y0;
+
+        while (x !== x1 || y !== y1) {
+            const e2 = err * 2;
+            if (e2 > -dy) {
+                err -= dy;
+                x += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y += sy;
+            }
+            // 到达终点 → 停止（不检查终点格子）
+            if (x === x1 && y === y1) break;
+            // 检查中间格子是否有墙
+            const cell = this.grid[y]?.[x];
+            if (cell === CELL.WALL || cell === CELL.HIDDEN_WALL) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // ─────── 状态机 ───────
@@ -257,45 +337,38 @@ export class Monster {
 
         switch (this.state) {
             case MONSTER_STATE.PATROL:
-                if (detect) {
-                    this._transitionTo(MONSTER_STATE.ATTACK);
-                } else if (alert) {
-                    this._transitionTo(MONSTER_STATE.TRACK);
-                } else if (hearing) {
-                    // 听到声音 → 往大致方向调查（带随机偏移，非精确玩家位置）
-                    const offsetX = Math.floor(Math.random() * 7) - 3; // -3 ~ +3
-                    const offsetY = Math.floor(Math.random() * 7) - 3;
-                    this._transitionTo(MONSTER_STATE.INVESTIGATE, {
-                        x: Math.max(1, Math.min(this.gridCols - 2, playerGX + offsetX)),
-                        y: Math.max(1, Math.min(this.gridRows - 2, playerGY + offsetY))
-                    });
+                // 新机制：听觉累计 ≥1s 且冷却已过 → 弹跳警觉
+                if (this._hearingTimer >= 1000 && this._alertCooldown <= 0) {
+                    this._transitionTo(MONSTER_STATE.ALERTED);
+                    this._alertTarget = { x: playerGX, y: playerGY };
+                }
+                // 投石噪音仍可直接触发调查（保留现有逻辑）
+                // （噪音源在 _detectPlayer 中已处理）
+                break;
+
+            case MONSTER_STATE.ALERTED:
+                // 弹跳 300ms → 前往标记格子
+                if (this._stateTimer >= 300) {
+                    this._transitionTo(MONSTER_STATE.INVESTIGATE, this._alertTarget);
+                    this._alertTarget = null;
                 }
                 break;
 
             case MONSTER_STATE.INVESTIGATE:
-                if (detect) {
-                    this._transitionTo(MONSTER_STATE.ATTACK);
-                } else if (alert) {
-                    this._transitionTo(MONSTER_STATE.TRACK);
-                } else if (this._stateTimer > 5000) {
-                    // 调查超时 → 回到巡逻
-                    this._transitionTo(MONSTER_STATE.PATROL);
-                }
+                // （到达目标格后由 _updateMovement 处理转移到 RETURNING）
+                // 若在途中重新检测到玩家在听觉范围且计时器未满，继续保持 INVESTIGATE
+                break;
+
+            case MONSTER_STATE.RETURNING:
+                // 回到巡逻路径点后由 _updateMovement 处理转移到 PATROL
                 break;
 
             case MONSTER_STATE.TRACK:
-                if (detect) {
-                    this._transitionTo(MONSTER_STATE.ATTACK);
-                } else if (!alert && !hearing && this._stateTimer > 3000) {
-                    // 丢失目标 3 秒 → 回到调查（最后已知位置）
-                    this._transitionTo(MONSTER_STATE.INVESTIGATE, { x: playerGX, y: playerGY });
-                }
+                // TRACK 暂未启用
                 break;
 
             case MONSTER_STATE.ATTACK:
-                if (!detect && !alert) {
-                    this._transitionTo(MONSTER_STATE.TRACK);
-                }
+                // ATTACK 暂未启用
                 break;
 
             case MONSTER_STATE.STUNNED:
@@ -321,14 +394,16 @@ export class Monster {
      * 沿 _path 向 _currentTarget 移动
      */
     _updatePosition(dt) {
-        if (!this._currentTarget || this.state === MONSTER_STATE.STUNNED) return;
+        if (!this._currentTarget || this.state === MONSTER_STATE.STUNNED ||
+            this.state === MONSTER_STATE.ALERTED) return;
 
         const tx = this._currentTarget.x + 0.5; // 目标格中心 X
         const ty = this._currentTarget.y + 0.5; // 目标格中心 Y
         const dx = tx - this.pixelX;
         const dy = ty - this.pixelY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const step = this.moveSpeed * (dt / 1000); // 本帧移动距离（格）
+        const speedMul = this.state === MONSTER_STATE.INVESTIGATE ? this._investigateSpeedMul : 1;
+        const step = this.moveSpeed * speedMul * (dt / 1000); // 本帧移动距离（格）
 
         if (dist <= step) {
             // 到达当前目标格中心
@@ -408,9 +483,9 @@ export class Monster {
     }
 
     _updateMovement(dt, playerGX, playerGY) {
-        // 被眩晕 → 不移动
-        if (this.state === MONSTER_STATE.STUNNED) {
-            // 清除路径/目标
+        // 不移动的状态
+        if (this.state === MONSTER_STATE.STUNNED ||
+            this.state === MONSTER_STATE.ALERTED) {
             this._path = [];
             this._currentTarget = null;
             this._pathIndex = 0;
@@ -420,7 +495,6 @@ export class Monster {
         // 路径计时器
         this._pathTimer += dt;
 
-        // 根据状态决定是否需要更新路径
         let needNewPath = false;
         let targetX = null;
         let targetY = null;
@@ -428,11 +502,9 @@ export class Monster {
         switch (this.state) {
             case MONSTER_STATE.PATROL:
                 if (this.patrolPath.length > 0) {
-                    // 巡逻路径
                     const wp = this.patrolPath[this._patrolIndex];
                     targetX = wp.x;
                     targetY = wp.y;
-                    // 到达巡逻点后切换到下一个
                     if (this.gridX === targetX && this.gridY === targetY) {
                         this._patrolIndex = (this._patrolIndex + 1) % this.patrolPath.length;
                         needNewPath = true;
@@ -442,7 +514,7 @@ export class Monster {
                         needNewPath = true;
                     }
                 } else {
-                    // 随机游走
+                    // 无巡逻路径 → 随机游走（fallback）
                     if (!this._randomTarget ||
                         (Math.abs(this.gridX - this._randomTarget.x) + Math.abs(this.gridY - this._randomTarget.y) < 2) ||
                         this._isStuck ||
@@ -459,67 +531,77 @@ export class Monster {
                         }
                     }
                 }
-                // 巡逻时固定路径只定期重算
                 break;
 
             case MONSTER_STATE.INVESTIGATE:
                 if (this._investigateTarget) {
                     targetX = this._investigateTarget.x;
                     targetY = this._investigateTarget.y;
-                    // 到达调查点 → 回到巡逻
+                    // 到达调查目标 → 设置冷却 + 进入 RETURNING
+                    if (this.gridX === targetX && this.gridY === targetY) {
+                        this._alertCooldown = 3000; // 3s 冷却
+                        this._returnTarget = this._nearestPatrolPathPoint();
+                        if (this._returnTarget) {
+                            this._transitionTo(MONSTER_STATE.RETURNING);
+                            this._path = [];
+                            this._currentTarget = null;
+                            return;
+                        } else {
+                            // 无巡逻路径 → 直接回 PATROL
+                            this._transitionTo(MONSTER_STATE.PATROL);
+                            this._path = [];
+                            this._currentTarget = null;
+                            return;
+                        }
+                    }
+                    // A* 寻路到目标
+                    if (this._path.length === 0 && !this._currentTarget) {
+                        needNewPath = true;
+                    } else if (this._pathTimer >= this._pathRecalcInterval) {
+                        needNewPath = true;
+                    }
+                }
+                break;
+
+            case MONSTER_STATE.RETURNING:
+                if (this._returnTarget) {
+                    targetX = this._returnTarget.x;
+                    targetY = this._returnTarget.y;
+                    // 回到巡逻路径点 → 恢复 PATROL
                     if (this.gridX === targetX && this.gridY === targetY) {
                         this._transitionTo(MONSTER_STATE.PATROL);
                         this._path = [];
                         this._currentTarget = null;
+                        this._returnTarget = null;
                         return;
                     }
-                    // 贪婪移动（非 A*），更像是"探索声音方向"
-                    if (!this._currentTarget) {
-                        this._moveToward(targetX, targetY);
+                    // A* 寻路到目标
+                    if (this._path.length === 0 && !this._currentTarget) {
+                        needNewPath = true;
+                    } else if (this._pathTimer >= this._pathRecalcInterval) {
+                        needNewPath = true;
                     }
-                    // 卡住 → 随机走一步再试
-                    if (this._isStuck) {
-                        this._isStuck = false;
-                        this._randomWalk();
-                    }
-                }
-                break;
-
-            case MONSTER_STATE.TRACK:
-                targetX = playerGX;
-                targetY = playerGY;
-                // 快速重算跟踪路径（500ms）
-                if (this._path.length === 0 && !this._currentTarget) {
-                    needNewPath = true;
-                } else if (this._pathTimer >= this._pathRecalcInterval * 0.6) {
-                    needNewPath = true;
-                }
-                break;
-
-            case MONSTER_STATE.ATTACK:
-                targetX = playerGX;
-                targetY = playerGY;
-                // 攻击状态频繁重算（300ms）
-                if (this._path.length === 0 && !this._currentTarget) {
-                    needNewPath = true;
-                } else if (this._pathTimer >= this._pathRecalcInterval * 0.4) {
-                    needNewPath = true;
+                } else {
+                    // 没有返回目标 → 直接回 PATROL
+                    this._transitionTo(MONSTER_STATE.PATROL);
+                    this._path = [];
+                    this._currentTarget = null;
+                    return;
                 }
                 break;
         }
 
-        // 已卡住 → 直接重算路径
+        // 已卡住 → 强制重算
         if (this._isStuck) {
             needNewPath = true;
             this._isStuck = false;
-            this._pathTimer = this._pathRecalcInterval; // 强制立即重算
+            this._pathTimer = this._pathRecalcInterval;
         }
 
-        // 有目标且需要寻路 → 计算 A* 路径
+        // 有目标且需要寻路 → A*
         if (needNewPath && targetX !== null && targetY !== null) {
             this._path = this._computeAStar(this.gridX, this.gridY, targetX, targetY);
             this._pathIndex = 0;
-            // 没有路径：尝试直接移动
             if (this._path.length === 0) {
                 this._currentTarget = { x: targetX, y: targetY };
             } else {
@@ -528,7 +610,7 @@ export class Monster {
             this._pathTimer = 0;
         }
 
-        // 如果没有目标也没有路径 → 结束移动
+        // 无目标无路径 → fallback
         if (!this._currentTarget && this._path.length === 0) {
             if (this.state === MONSTER_STATE.PATROL) {
                 this._randomWalk();
@@ -536,10 +618,31 @@ export class Monster {
             return;
         }
 
-        // 如果还没有当前目标但有路径 → 取第一个
         if (!this._currentTarget && this._path.length > 0) {
             this._currentTarget = this._path[0];
         }
+    }
+
+    /**
+     * 找巡逻路径中离当前位置最近的可达点
+     * @returns {{x:number, y:number}|null}
+     */
+    _nearestPatrolPathPoint() {
+        if (!this.patrolPath || this.patrolPath.length === 0) return null;
+        let best = null;
+        let bestDist = Infinity;
+        for (const wp of this.patrolPath) {
+            const d = Math.abs(wp.x - this.gridX) + Math.abs(wp.y - this.gridY);
+            // 优先用 A* 检测可达性
+            if (d < bestDist) {
+                const path = this._computeAStar(this.gridX, this.gridY, wp.x, wp.y);
+                if (path.length > 0 || (wp.x === this.gridX && wp.y === this.gridY)) {
+                    best = wp;
+                    bestDist = d;
+                }
+            }
+        }
+        return best;
     }
 
     _pickRandomPatrolTarget() {
@@ -689,6 +792,8 @@ export class Monster {
     /** 判断目标格是否可通行 */
     _canMoveTo(gx, gy) {
         if (gx < 0 || gx >= this.gridCols || gy < 0 || gy >= this.gridRows) return false;
+        // 玩家碰撞：不能走入玩家所在的格子
+        if (gx === this._playerGX && gy === this._playerGY) return false;
         const cell = this.grid[gy][gx];
         return cell !== CELL.WALL && cell !== CELL.HIDDEN_WALL
             && cell !== CELL.HIDDEN_FLOOR && cell !== CELL.HIDDEN_PASSAGE;
@@ -713,7 +818,7 @@ export class MonsterManager {
      * @param {number[][]} grid - 地图网格
      * @param {number} gridCols - 列数
      * @param {number} gridRows - 行数
-     * @param {Array} rooms - 房间列表（用于放置怪物）
+     * @param {Array} rooms - 房间列表（用于放置怪物+生成巡逻路径）
      */
     generateMonsters(grid, gridCols, gridRows, rooms) {
         this.monsters = [];
@@ -739,7 +844,7 @@ export class MonsterManager {
 
         if (usableCells.length < 3) {
             // 地图太小，只放 1 个
-            this._createMonster(usableCells[0] || floorCells[0], grid, gridCols, gridRows);
+            this._createMonster(usableCells[0] || floorCells[0], grid, gridCols, gridRows, null, rooms);
             return;
         }
 
@@ -763,12 +868,16 @@ export class MonsterManager {
         const tileTypes = [109, 111, 120, 121];
         for (let i = 0; i < picked.length; i++) {
             const tileIdx = tileTypes[i % tileTypes.length];
-            this._createMonster(picked[i], grid, gridCols, gridRows, tileIdx);
+            this._createMonster(picked[i], grid, gridCols, gridRows, tileIdx, rooms);
         }
     }
 
-    _createMonster(pos, grid, gridCols, gridRows, tileIndex) {
+    _createMonster(pos, grid, gridCols, gridRows, tileIndex, rooms) {
         const tileIdx = tileIndex || [109, 111, 120, 121][Math.floor(Math.random() * 4)];
+
+        // 生成巡逻路径：在怪物所在的房间内做 5~7 步随机行走
+        const patrolPath = MonsterManager._generateRoomPatrolPath(pos.x, pos.y, grid, rooms, 5 + Math.floor(Math.random() * 3));
+
         const monster = new Monster({
             id: `monster_${this.monsters.length}`,
             tileIndex: tileIdx,
@@ -779,8 +888,65 @@ export class MonsterManager {
             gridCols,
             gridRows,
             moveInterval: 600 + Math.random() * 400,
+            patrolPath,
         });
         this.monsters.push(monster);
+    }
+
+    /**
+     * 在房间内生成往返巡逻路径
+     * @param {number} startX - 起始格 X
+     * @param {number} startY - 起始格 Y
+     * @param {number[][]} grid - 地图网格
+     * @param {Array} rooms - 房间列表
+     * @param {number} steps - 目标步数（5~7）
+     * @returns {Array<{x:number, y:number}>} 巡逻路径点列表
+     */
+    static _generateRoomPatrolPath(startX, startY, grid, rooms, steps) {
+        // 找到怪物所在的房间
+        let roomInterior = null;
+        for (const room of rooms) {
+            const ib = room.interior;
+            if (startX >= ib.left && startX <= ib.right &&
+                startY >= ib.top && startY <= ib.bottom) {
+                roomInterior = ib;
+                break;
+            }
+        }
+        if (!roomInterior) return []; // 不在任何房间内
+
+        // 在房间内随机行走
+        const path = [{ x: startX, y: startY }];
+        const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+        let cx = startX, cy = startY;
+
+        for (let i = 0; i < steps; i++) {
+            const shuffled = [...dirs].sort(() => Math.random() - 0.5);
+            let found = false;
+            for (const [dx, dy] of shuffled) {
+                const nx = cx + dx;
+                const ny = cy + dy;
+                if (nx >= roomInterior.left && nx <= roomInterior.right &&
+                    ny >= roomInterior.top && ny <= roomInterior.bottom &&
+                    grid[ny][nx] === CELL.FLOOR) {
+                    // 避免退回上一个格子
+                    if (path.length >= 2 && nx === path[path.length - 2].x &&
+                        ny === path[path.length - 2].y) continue;
+                    path.push({ x: nx, y: ny });
+                    cx = nx; cy = ny;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) break; // 卡住，提前结束
+        }
+
+        // 镜像往返：A→B→C→D→C→B→A→B→...
+        const mirrored = [...path];
+        for (let i = path.length - 2; i >= 1; i--) {
+            mirrored.push(path[i]);
+        }
+        return mirrored;
     }
 
     /**
@@ -800,6 +966,14 @@ export class MonsterManager {
     }
 
     /**
+     * 设置特定怪物的攻击冷却（击中玩家后触发）
+     */
+    setMonsterHitCooldown(monsterId, cooldownMs) {
+        const m = this.monsters.find(m => m.id === monsterId);
+        if (m) m._hitCooldown = cooldownMs;
+    }
+
+    /**
      * 获取所有怪物状态（用于渲染和调试）
      * @returns {Array}
      */
@@ -816,6 +990,7 @@ export class MonsterManager {
             renderFacingRad: m._renderFacingRad,
             state: m.state,
             detection: m.lastDetection,
+            hitCooldown: m._hitCooldown,
         }));
     }
 }

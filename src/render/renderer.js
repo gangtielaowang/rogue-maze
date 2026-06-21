@@ -155,7 +155,8 @@ export class Renderer {
         const { grid, playerPixelX, playerPixelY, playerGX, playerGY,
                 playerDirection, playerIsMoving, seenCells, seenCellsTime,
                 boosterActive, fogEnabled, chestStates, fogOpts, monsters,
-                stealthActive, meatPositions, stoneTarget, bossPatrol } = state;
+                stealthActive, meatPositions, stoneTarget, bossPatrol, noiseLevel,
+                playerCredits, damageFlashTimer, gameOverActive } = state;
         const now = state.now || performance.now();
 
         const screenWidth = this.canvas.width / this.dpr;
@@ -312,7 +313,7 @@ export class Renderer {
 
         // ── 怪物感知范围 + 怪物本体（绝对屏幕坐标） ──
         if (monsters && monsters.length > 0) {
-            this._drawMonsters(monsters, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
+            this._drawMonsters(monsters, cellW, cellH, camIntX, camIntY, camFracX, camFracY, grid);
         }
 
         // ── 准备玩家屏幕坐标 ──
@@ -345,6 +346,64 @@ export class Renderer {
                 this._drawBossPatrol(bossPatrol, cellW, cellH, camIntX, camIntY, camFracX, camFracY);
             }
             drawPlayer();
+        }
+
+        // ── 玩家脚步声范围（调试开关，默认开） ──
+        if (typeof window !== 'undefined' && window.__showPlayerHearingRange) {
+            const nl = noiseLevel ?? 1;
+            const effectiveGrids = Math.round(5 * nl); // 默认听觉 5 格 × 噪音倍率
+            const hearingRadius = effectiveGrids * cellW;
+            const dim = stealthActive ? 0.4 : 1;
+
+            // 墙体遮挡后的脚步声范围
+            const occPts = this._getOccludedSectorPoints(
+                playerScreenX, playerScreenY, hearingRadius,
+                0, Math.PI * 2, 5, grid,
+                this.gridOffsetX, this.gridOffsetY, cellW, cellH,
+                camIntX, camIntY, camFracX, camFracY
+            );
+
+            ctx.save();
+            // 填充（多边形）
+            ctx.beginPath();
+            ctx.moveTo(occPts[0].x, occPts[0].y);
+            for (let i = 1; i < occPts.length; i++) {
+                ctx.lineTo(occPts[i].x, occPts[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = `rgba(255, 200, 100, ${0.05 * dim})`;
+            ctx.fill();
+
+            // 描边（只画外圈边界，不画回到中心的线）
+            ctx.beginPath();
+            ctx.moveTo(occPts[1].x, occPts[1].y);
+            for (let i = 2; i < occPts.length; i++) {
+                ctx.lineTo(occPts[i].x, occPts[i].y);
+            }
+            ctx.strokeStyle = `rgba(255, 200, 100, ${0.25 * dim})`;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 标签（找实际最上和最下边界点）
+            let topPt = occPts[1], bottomPt = occPts[1];
+            for (let i = 2; i < occPts.length; i++) {
+                if (occPts[i].y < topPt.y) topPt = occPts[i];
+                if (occPts[i].y > bottomPt.y) bottomPt = occPts[i];
+            }
+            ctx.fillStyle = `rgba(255, 200, 100, ${0.45 * dim})`;
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            const label = nl < 1 ? `脚步声 ${effectiveGrids} 格 (静步)` : `脚步声 ${effectiveGrids} 格`;
+            ctx.fillText(label, topPt.x, topPt.y - 2);
+            ctx.fillStyle = `rgba(255, 200, 100, ${0.25 * dim})`;
+            ctx.font = '9px monospace';
+            ctx.textBaseline = 'top';
+            // 底部标签
+            ctx.fillText('圈内怪物若面朝你即可听见', bottomPt.x, bottomPt.y + 4);
+            ctx.restore();
         }
 
         // ── 调试碰撞盒 ──
@@ -445,6 +504,49 @@ export class Renderer {
         if (monsters && monsters.length > 0) {
             this._drawThreatIndicator(monsters, ctx, screenWidth, screenHeight);
         }
+
+        // ── 伤害闪红效果 ──
+        if (damageFlashTimer > 0) {
+            ctx.save();
+            const intensity = Math.min(1, damageFlashTimer / 300);
+            ctx.fillStyle = `rgba(255, 0, 0, ${0.2 * intensity})`;
+            ctx.fillRect(0, 0, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
+            ctx.restore();
+        }
+
+        // ── 血量显示（爱心） ──
+        if (!gameOverActive && playerCredits !== undefined) {
+            ctx.save();
+            ctx.font = '18px serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            const hearts = '❤️'.repeat(Math.max(0, playerCredits));
+            const emptyHearts = '🖤'.repeat(Math.max(0, 3 - playerCredits));
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillRect(8, 8, 100, 30);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(hearts + emptyHearts, 14, 12);
+            ctx.restore();
+        }
+
+        // ── 游戏结束画面 ──
+        if (gameOverActive) {
+            ctx.save();
+            // 半透黑背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.fillRect(0, 0, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
+            // 标题
+            ctx.fillStyle = '#ff4444';
+            ctx.font = 'bold 48px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('游戏失败', (this.canvas.width / this.dpr) / 2, (this.canvas.height / this.dpr) / 2 - 20);
+            // 提示文字
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '16px monospace';
+            ctx.fillText('按 R 重新开始', (this.canvas.width / this.dpr) / 2, (this.canvas.height / this.dpr) / 2 + 30);
+            ctx.restore();
+        }
     }
 
     // ─────── 调试：碰撞盒 ───────
@@ -498,7 +600,7 @@ export class Renderer {
      * 绘制一批怪物（感知范围 + tile）
      * 使用绝对屏幕坐标（调用前已 ctx.restore）
      */
-    _drawMonsters(monsters, cellW, cellH, camIntX, camIntY, camFracX, camFracY) {
+    _drawMonsters(monsters, cellW, cellH, camIntX, camIntY, camFracX, camFracY, grid) {
         const ctx = this.ctx;
         const viewW = Math.ceil(this.canvas.width / this.dpr / cellW) + 2;
         const viewH = Math.ceil(this.canvas.height / this.dpr / cellH) + 2;
@@ -526,9 +628,29 @@ export class Renderer {
                 : this._facingToRad(m.facing);
 
             // ── 感知范围 ──
-            this._drawSectorRad(ctx, centerX, centerY,
-                7 * cellW, facingRad, 120,
-                m.detection?.hearing ? 'rgba(255, 255, 180, 0.12)' : 'rgba(255, 255, 180, 0.05)');
+            {
+                // 听觉：墙体遮挡
+                const hearingRadiusPx = 5 * cellW;
+                const halfHearing = (120 / 2) * Math.PI / 180;
+                const hearingOcc = this._getOccludedSectorPoints(
+                    centerX, centerY, hearingRadiusPx,
+                    facingRad - halfHearing, facingRad + halfHearing, 5, grid,
+                    this.gridOffsetX, this.gridOffsetY, cellW, cellH,
+                    camIntX, camIntY, camFracX, camFracY
+                );
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(hearingOcc[0].x, hearingOcc[0].y);
+                for (let i = 1; i < hearingOcc.length; i++) {
+                    ctx.lineTo(hearingOcc[i].x, hearingOcc[i].y);
+                }
+                ctx.closePath();
+                ctx.fillStyle = m.detection?.hearing
+                    ? 'rgba(255, 255, 180, 0.12)' : 'rgba(255, 255, 180, 0.05)';
+                ctx.fill();
+                ctx.restore();
+            }
+            // 警觉、察觉（视觉，不受墙体遮挡）
             this._drawSectorRad(ctx, centerX, centerY,
                 4 * cellW, facingRad, 120,
                 m.detection?.alert ? 'rgba(255, 180, 60, 0.18)' : 'rgba(255, 180, 60, 0.07)');
@@ -550,27 +672,67 @@ export class Renderer {
                 ctx.fillText('!', sx + cellW / 2, sy + cellH / 2);
             }
 
-            // ── 碰撞盒 + 状态文字（调试用） ──
+            // ── ALERTED 状态：头顶闪烁"!"标记 ──
+            if (m.state === 'alerted') {
+                ctx.save();
+                const pulse = 1 + Math.sin(performance.now() / 80) * 0.15;
+                ctx.font = `bold ${Math.round(cellW * 0.5 * pulse)}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = '#ff3300';
+                ctx.shadowColor = '#ff3300';
+                ctx.shadowBlur = 8;
+                ctx.fillText('❗', sx + cellW / 2, sy - 2);
+                ctx.restore();
+            }
+
+            // ── 碰撞盒 + 怪物信息（调试用） ──
             if (typeof window !== 'undefined' && window.__showCollisionBox) {
                 ctx.save();
-                // 碰撞区域圆
+                // ── 碰撞区域圆 ──
+                const mRadius = cellW * 0.35;
                 ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)';
                 ctx.lineWidth = 1.5;
-                const mRadius = cellW * 0.35;
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, mRadius, 0, Math.PI * 2);
                 ctx.stroke();
-                // 怪物格边界
-                ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+                // ── 怪物格边界 ──
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.25)';
                 ctx.lineWidth = 1;
                 ctx.setLineDash([2, 2]);
                 ctx.strokeRect(sx, sy, cellW, cellH);
                 ctx.setLineDash([]);
-                // 状态文字
-                ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx.font = '10px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(m.state, sx + cellW / 2, sy - 4);
+                // ── 朝向线 ──
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.15)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX + Math.cos(facingRad) * cellW * 0.6, centerY + Math.sin(facingRad) * cellW * 0.6);
+                ctx.stroke();
+
+                // ── 信息面板（半透背景 + 多行文字） ──
+                const infoLines = [
+                    `[${m.type}] ${m.state}`,
+                    `g:${m.gridX},${m.gridY}  p:${m.pixelX.toFixed(1)},${m.pixelY.toFixed(1)}`,
+                    `检测: ${m.detection?.hearing ? '👂' : '_'}${m.detection?.alert ? '⚠️' : '_'}${m.detection?.detect ? '🔴' : '_'}`,
+                ];
+                const fontSize = 9;
+                ctx.font = `${fontSize}px monospace`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const lineH = fontSize + 2;
+                const panelW = Math.round(cellW * 2.2);
+                const panelH = infoLines.length * lineH + 4;
+                const panelX = sx + cellW + 2;
+                const panelY = sy;
+                // 背景
+                ctx.fillStyle = 'rgba(0,0,0,0.55)';
+                ctx.fillRect(panelX, panelY, panelW, panelH);
+                // 文字
+                ctx.fillStyle = 'rgba(255,255,220,0.8)';
+                infoLines.forEach((line, i) => {
+                    ctx.fillText(line, panelX + 2, panelY + 2 + i * lineH);
+                });
                 ctx.restore();
             }
         }
@@ -778,6 +940,61 @@ export class Renderer {
         ctx.fillStyle = color;
         ctx.fill();
         ctx.restore();
+    }
+
+    /**
+     * 射线投射：计算被墙体遮挡的扇形/圆形边界点（屏幕像素坐标）
+     * @param {number} cx - 屏幕像素中心 X
+     * @param {number} cy - 屏幕像素中心 Y
+     * @param {number} radiusPixels - 最大半径（像素）
+     * @param {number} startAngle - 起始弧度
+     * @param {number} endAngle - 结束弧度
+     * @param {number} stepDeg - 角度步长（度）
+     * @param {number[][]} grid
+     * @returns {{x:number,y:number}[]} 边界点数组（含中心点，适合 moveTo/lineTo/closePath）
+     */
+    _getOccludedSectorPoints(cx, cy, radiusPixels, startAngle, endAngle, stepDeg, grid,
+                              gridOffsetX, gridOffsetY, cellW, cellH,
+                              camIntX, camIntY, camFracX, camFracY) {
+        // 屏幕中心 → 世界网格坐标
+        const centerGX = (cx - gridOffsetX) / cellW + camIntX + camFracX;
+        const centerGY = (cy - gridOffsetY) / cellH + camIntY + camFracY;
+        const stepRad = stepDeg * Math.PI / 180;
+        const numSteps = Math.max(1, Math.ceil((endAngle - startAngle) / stepRad));
+        const points = [{ x: cx, y: cy }];
+        const totalRows = grid.length;
+        const totalCols = grid[0].length;
+
+        for (let i = 0; i <= numSteps; i++) {
+            const ang = startAngle + i * stepRad;
+            const dirX = Math.cos(ang);
+            const dirY = Math.sin(ang);
+
+            // 沿射线行走，步长=1 格
+            let maxDistPixels = radiusPixels;
+            let endGX = centerGX + dirX * radiusPixels / cellW;
+            let endGY = centerGY + dirY * radiusPixels / cellH;
+            for (let d = cellW; d < maxDistPixels; d += cellW) {
+                const gx = Math.floor(centerGX + dirX * d / cellW);
+                const gy = Math.floor(centerGY + dirY * d / cellW);
+                if (gx < 0 || gx >= totalCols || gy < 0 || gy >= totalRows) break;
+                const cell = grid[gy][gx];
+                if (cell === CELL.WALL || cell === CELL.HIDDEN_WALL) {
+                    // 碰到墙：把端点设到墙前一格
+                    const prevD = d - cellW;
+                    endGX = centerGX + dirX * prevD / cellW;
+                    endGY = centerGY + dirY * prevD / cellW;
+                    break;
+                }
+            }
+
+            // 世界坐标 → 屏幕像素
+            const sx = gridOffsetX + (endGX - camIntX) * cellW - camFracX * cellW;
+            const sy = gridOffsetY + (endGY - camIntY) * cellH - camFracY * cellH;
+            points.push({ x: sx, y: sy });
+        }
+
+        return points;
     }
 
     /**

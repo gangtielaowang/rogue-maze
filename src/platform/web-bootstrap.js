@@ -644,6 +644,14 @@ export async function startGame(container) {
     let dashEndPY = 0;
     let dashDir = 'down';
 
+    // ── 玩家生命值（积分性质） ──
+    let playerCredits = 3;
+    let globalHitCooldown = 0;      // 全局攻击冷却 (ms)
+    let damageFlashTimer = 0;       // 受伤闪红计时 (ms)
+    let gameOverActive = false;     // 游戏结束标记
+    const GLOBAL_HIT_INTERVAL = 800;   // 全局最短攻击间隔 ms
+    const MONSTER_HIT_COOLDOWN = 2000; // 单个怪物攻击冷却 ms
+
     // ── 输入 ──
     const input = createInputManager();
 
@@ -656,7 +664,7 @@ export async function startGame(container) {
         createControlButtons(ctrlRight, hud);
     }
 
-    // 在首次用户交互时立即初始化音频（点击/触摸/按键事件触发）
+    // ── 首次用户交互时立即初始化音频 ──
     function ensureAudio() {
         if (audioInited) return;
         audioInited = true;
@@ -953,13 +961,61 @@ export async function startGame(container) {
         }
     }
 
+    // ── 按 R 重新开始（游戏结束时） ──
+    document.addEventListener('keydown', function _restartHandler(e) {
+        if ((e.key === 'r' || e.key === 'R') && gameOverActive) {
+            location.reload();
+        }
+    });
+
     // ── 游戏循环 ──
     let prevTimestamp = 0;
+
+    // ── 渲染步骤（从 gameLoop 提取，供游戏结束也调用） ──
+    function doRender(dt, quietMode, boosterActive, noiseLevel) {
+        renderer.update(playerPixelX, playerPixelY, dt);
+        renderer.spriteRenderer.quietMode = quietMode;
+        renderer.spriteRenderer.updateAnimation(dt, dashProgress > 0);
+        renderer.fogRenderer.updateAnimation(dt);
+        renderer.render({
+            grid,
+            playerPixelX,
+            playerPixelY,
+            playerGX: bridge.playerGlobalX,
+            playerGY: bridge.playerGlobalY,
+            playerDirection,
+            playerIsMoving,
+            seenCells: bridge.seenCells,
+            seenCellsTime: bridge.seenCellsTime,
+            boosterActive,
+            fogEnabled: window.__fogEnabled,
+            chestStates: bridge.chestStates,
+            targetMarker: autoTarget,
+            fogOpts: window.__fogOpts || undefined,
+            monsters: getMonstersExcludeBossRoom(bridge.getMonsters()),
+            stealthActive: bridge.isStealthActive(),
+            noiseLevel,
+            meatPositions: bridge.getMeatPositions(),
+            stoneTarget: bridge.getLastStoneTarget(),
+            bossPatrol,
+            playerCredits,
+            damageFlashTimer,
+            gameOverActive,
+            now: performance.now(),
+        });
+    }
 
     function gameLoop(timestamp) {
         if (!prevTimestamp) prevTimestamp = timestamp;
         const dt = Math.min((timestamp - prevTimestamp) / 1000, 0.1);
         prevTimestamp = timestamp;
+
+        // ── 游戏结束：停止更新，只渲染 ──
+        if (gameOverActive) {
+            doRender(dt, false, false, 1);
+            platform.requestAnimationFrame(gameLoop);
+            return;
+        }
 
         // ── 闪现冷却计时 ──
         if (dashCooldown > 0) dashCooldown = Math.max(0, dashCooldown - dt);
@@ -1113,8 +1169,8 @@ export async function startGame(container) {
         const noiseElapsed = performance.now() - (window.__noiseSourceTime || 0);
         const noiseSource = (noiseElapsed < 500) ? window.__noiseSource : null;
 
-        // ── 噪音等级（静步=0.3, 正常=1） ──
-        const noiseLevel = isQuiet ? 0.3 : 1;
+        // ── 噪音等级（静步=0.4→2格, 正常=1→5格） ──
+        const noiseLevel = isQuiet ? 0.4 : 1;
 
         // ── 闪现动画更新 ──
         if (dashProgress > 0) {
@@ -1235,38 +1291,42 @@ export async function startGame(container) {
         const stealthActive = bridge.isStealthActive();
         bridge.updateMonsters(dt * 1000, noiseSource, stealthActive, noiseLevel);
 
+        // ── 全局闪红计时递减（始终执行，即使游戏结束也淡出） ──
+        if (damageFlashTimer > 0) {
+            damageFlashTimer = Math.max(0, damageFlashTimer - dt * 1000);
+        }
+
+        // ── 玩家受伤检测（察觉区 + 冷却判断） ──
+        if (!gameOverActive && playerCredits > 0) {
+            // 全局冷却递减
+            if (globalHitCooldown > 0) {
+                globalHitCooldown = Math.max(0, globalHitCooldown - dt * 1000);
+            }
+            // 检查所有怪物
+            const allMonsters = bridge.getMonsters();
+            for (const m of allMonsters) {
+                if (playerCredits <= 0) break;
+                if (globalHitCooldown > 0) break;
+                if (m.hitCooldown > 0) continue;
+                if (m.detection?.detect) {
+                    playerCredits--;
+                    globalHitCooldown = GLOBAL_HIT_INTERVAL;
+                    damageFlashTimer = 300; // 300ms 红色闪烁
+                    bridge.setMonsterHitCooldown(m.id, MONSTER_HIT_COOLDOWN);
+                    if (playerCredits <= 0) {
+                        gameOverActive = true;
+                    }
+                }
+            }
+        }
+
         // ── Boss 巡逻更新 ──
         if (bossPatrol) {
             updateBossPatrol(bossPatrol, dt, wallRects, playerPixelX, playerPixelY);
         }
 
         // ── 更新渲染器 ──
-        renderer.update(playerPixelX, playerPixelY, dt);
-        renderer.spriteRenderer.quietMode = isQuiet;
-        renderer.spriteRenderer.updateAnimation(dt, dashProgress > 0);
-        renderer.fogRenderer.updateAnimation(dt);
-        renderer.render({
-            grid,
-            playerPixelX,
-            playerPixelY,
-            playerGX: bridge.playerGlobalX,
-            playerGY: bridge.playerGlobalY,
-            playerDirection,
-            playerIsMoving,
-            seenCells: bridge.seenCells,
-            seenCellsTime: bridge.seenCellsTime,
-            boosterActive,
-            fogEnabled: window.__fogEnabled,
-            chestStates: bridge.chestStates,
-            targetMarker: autoTarget,
-            fogOpts: window.__fogOpts || undefined,
-            monsters: getMonstersExcludeBossRoom(bridge.getMonsters()),
-            stealthActive: bridge.isStealthActive(),
-            meatPositions: bridge.getMeatPositions(),
-            stoneTarget: bridge.getLastStoneTarget(),
-            bossPatrol,
-            now: performance.now(),
-        });
+        doRender(dt, isQuiet, boosterActive, noiseLevel);
 
         platform.requestAnimationFrame(gameLoop);
     }

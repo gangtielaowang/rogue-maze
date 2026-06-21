@@ -30,6 +30,7 @@ window.__fogEnabled = true;
 window.__chestPassable = false;
 window.__showCollisionBox = false;
 window.__showHiddenRooms = false;
+window.__showPlayerHearingRange = true; // 默认开启
 window.__fogOpts = {
     dissolveMs: 500,
     frameScale: 2.8,
@@ -491,6 +492,10 @@ function createPanelDOM() {
                     <button class="dbg-toggle" id="dbg-tog-collision">开</button>
                 </div>
                 <div class="dbg-row">
+                    <label>脚步声范围</label>
+                    <button class="dbg-toggle on" id="dbg-tog-hearingrange">开</button>
+                </div>
+                <div class="dbg-row">
                     <label>宝箱可通行</label>
                     <button class="dbg-toggle" id="dbg-tog-chestpass">开</button>
                 </div>
@@ -729,6 +734,13 @@ function bindEvents(panel, bgmPanel, toggleBtn, audioPlayer, fogRenderer, bgmSta
         updateToggleBtn(collisionBtn, window.__showCollisionBox);
     });
 
+    // ── 玩家听觉范围 ──
+    const hearingRangeBtn = document.getElementById('dbg-tog-hearingrange');
+    hearingRangeBtn.addEventListener('click', () => {
+        window.__showPlayerHearingRange = !window.__showPlayerHearingRange;
+        updateToggleBtn(hearingRangeBtn, window.__showPlayerHearingRange);
+    });
+
     // ── 宝箱可通行 ──
     const chestPassBtn = document.getElementById('dbg-tog-chestpass');
     chestPassBtn.addEventListener('click', () => {
@@ -960,6 +972,7 @@ function updateAllToggleButtons() {
     updateToggleBtn(document.getElementById('dbg-tog-fog'), window.__fogEnabled);
     updateToggleBtn(document.getElementById('dbg-tog-hidden'), window.__showHiddenRooms);
     updateToggleBtn(document.getElementById('dbg-tog-collision'), window.__showCollisionBox);
+    updateToggleBtn(document.getElementById('dbg-tog-hearingrange'), window.__showPlayerHearingRange);
     updateToggleBtn(document.getElementById('dbg-tog-chestpass'), window.__chestPassable);
 }
 
